@@ -1,0 +1,18 @@
+{
+  "settings": {
+    "notification": {
+      "onSuccess": {
+        "enabled": true,
+        "onTimeElapsed": true,
+        "time": 15,
+        "type": "notification"
+      },
+      "onError": {
+        "enabled": true,
+        "onTimeElapsed": true,
+        "time": 15,
+        "type": "notification"
+      }
+    }
+  }
+}

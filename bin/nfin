@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+
+# todo
+# - on keyboard interrupt
+# - move declarations to common file
+# - email
+# - text
+# - native notification
+
+# todo need?
+set -e
+
+# load and export configuration
+export NFIN_DIR=$(cd $(dirname "$0") && pwd)
+export NFIN_SETTINGS_FILE="$NFIN_DIR/config.json"
+export NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE )
+export NFIN_VOID_TIME=1
+
+source "$NFIN_DIR/internal/get_setting"
+
+. "$NFIN_DIR/internal/common"
+
+# todo remove
+# echo "num params: $#"
+
+function parse_args {
+  if [[ $# -eq 0 ]]; then
+    NFIN_VOID_TIME=0
+  elif [[ $# -ge 1 ]] && [[ $1 == -* ]]; then
+    arg_start_indices=()
+    count=0; for arg in "$@"; do
+      if [[ $arg == -* ]]; then
+        arg_start_indices+=( "$count" )
+      fi
+      ((++count))
+    done
+
+    for (( i=0; i<"${#arg_start_indices[@]}"; ++i )); do
+      index_1="${arg_start_indices[$i]}"
+      [[ "$index_1" -eq "${arg_start_indices[@]: -1:1}" ]] && index_2="$#" || index_2="${arg_start_indices[$(($i+1))]}"
+      
+      params="${@:$(($index_1+1)):$(($index_2-$index_1))}"
+
+      case "${params[0]}" in
+        -c|--config)
+          # todo: expect params length == 2 or 3
+          
+
+
+          case "${params[1]}" in
+            settings)
+              source "$DIR/internal/interactive_settings"
+              interactive_settings
+              exit 0
+              ;;
+            *)
+              # for each pair, try to set the setting
+              settings_list="${@:2}"
+              for (( i=0; i < ${#settings_list[@]} - 1; i+=2)); do
+                j=$(( $i+1 ))
+                echo "${settings_list["$i":"$j"]}"
+              done
+              exit 0
+              ;;
+          esac
+          ;;
+      esac
+        
+    done
+  fi
+}
+
+
+
+parse_args "$@"
+
+if [[ $# -eq 0 ]]; then
+  NFIN_VOID_TIME=0
+elif [[ $# -ge 1 ]]; then
+  case $1 in
+    -c|--config)
+      case $2 in
+        settings)
+          source "$DIR/internal/interactive_settings"
+          interactive_settings
+          exit 0
+          ;;
+        *)
+          # for each pair, try to set the setting
+          settings_list="${@:2}"
+          for (( i=0; i < ${#settings_list[@]} - 1; i+=2)); do
+            j=$(( $i+1 ))
+            echo "${settings_list["$i":"$j"]}"
+          done
+          exit 0
+          ;;
+      esac
+      ;;
+    -h|--help)
+      #todo print help
+      case $2 in
+        *)
+          echo "print all of help here"
+          ;;
+      esac
+      exit 0
+      ;;
+  esac
+fi
+
+source "$NFIN_DIR/internal/notify"
+
+# trap 'handle_notify "$start" "failure" "$?" "$LINENO"' ERR
+
+start=$(date +%s)
+
+# what do we want to do with the error output?
+# "$@" 2>/dev/null && outcome='success' || outcome='failure'
+eval "$@" && outcome='success' || outcome='failure'
+
+handle_notify "$start" "$outcome"
+
+# todo: handle errors from above, but for now...
+ [[ "$outcome" == 'success' ]] && exit 0 || exit 1

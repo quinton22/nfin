@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+source "$NFIN_DIR/internal/get_setting"
+
+# params
+# $1: start time
+# $2: "onSuccess" or "onError"
+# returns true if onTimeElapsed=true and runtime > elapseTime
+#   false if onTimeElapsed=false or runtime <= elapseTime
+function elapsed_time {
+  start="$1"
+  end=$(date +%s)
+  runtime=$((end-start))
+
+  base_setting="notification.$2"
+
+  on_time_elapsed=$( get_setting "$base_setting.onTimeElapsed" )
+
+  if "$on_time_elapsed"; then
+    elapsed_time=$( get_setting "$base_setting.time" )
+
+    if [[ "$runtime" -lt "$elapsed_time" ]]; then
+      # false
+      return 1
+    fi
+  fi
+
+  # true
+  return 0
+}

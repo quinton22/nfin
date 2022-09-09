@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+
+source "$NFIN_DIR/internal/get_setting"
+
+function interactive_settings () {
+  select item in "Display all" "Get" "Set"
+  do
+    break
+  done
+
+  all_settings=$( cat $SETTINGS_FILE )
+
+  case $item in
+    "Display all")
+      # display settings
+      cat "$NFIN_DIR/config.json" | jq .settings
+      ;;
+    Get)
+      # display settings to get
+      settings_with_quotes=$( echo "$all_settings" | jq '.settings | [paths] | map(join(".")) | .[]' )
+      settings=($(echo ${settings_with_quotes//\"/""}))
+      echo "${settings[@]}"
+      select setting in "${settings[@]}"
+      do
+        break
+      done
+
+      echo "$all_settings" | jq .settings.$setting
+      ;;
+    Set)
+      # set setting
+      settings_wq=$( echo "$all_settings" | jq '.settings | [paths] | map(join(".")) | .[]' )
+      settings=($(echo ${settings_wq//\"/""}))
+      echo "${settings[@]}"
+      select setting in "${settings[@]}"
+      do
+        break
+      done
+
+      setting_type_wq=$( echo "$all_settings" | jq ".settings.$setting | type" )
+      setting_type=$(echo ${setting_type_wq//\"/""})
+
+      until [[ "$setting_value_type_wq" == "$setting_type_wq" ]];
+      do
+        printf "$setting="
+        read setting_value
+
+        setting_value_type_wq=$( echo "$setting_value" | jq 'type' || echo '"null"' )
+
+        if [[ "$setting_value_type_wq" == '"null"' ]]
+        then
+          echo "if the input is a string, wrap it in quotes."
+        fi
+
+        if [[ "$setting_value_type_wq" != "$setting_type_wq" ]]
+        then
+          # different types
+          echo "Type mismatch. $setting is a $setting_type_wq type. You entered a $setting_value_type_wq type."
+        fi
+      done
+
+      
+      echo "$( echo "$all_settings" | jq ".settings.$setting=$setting_value" )" > "$NFIN_DIR/config.json"
+      ;;
+  esac
+}

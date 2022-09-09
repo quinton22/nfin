@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+source "$NFIN_DIR/internal/elapsed_time"
+source "$NFIN_DIR/internal/get_setting"
+. "$NFIN_DIR/internal/common"
+
+function native_notification {
+   if [[ "$OS" == 'Darwin' ]]; then
+    $1 && message="succeeded" || message="failed"
+    extra=" $3"
+    osascript -e "display $2 \"Command $message\"${extra-""}" &>/dev/null
+  fi
+  # todo windows
+}
+
+function alert {
+  $1 && alert_type='informational' || alert_type='critical'
+  native_notification $1 'alert' "as $alert_type"
+}
+
+function notification {
+  native_notification $1 'notification' "with title \"nFin\" sound name \"Submarine\""
+}
+
+function speak {
+  if [[ "$OS" == 'Darwin' ]]; then
+    $1 && saying="success" || saying="failure"
+    say "$saying"
+  else
+    bell $1
+  fi
+}
+
+function bell {
+  $1 && num_bells="\a" || num_bells="\a\a"
+  echo -en "$num_bells"
+}
+
+
+function notify {
+  setting=$1 # "onSuccess" or "onError"
+  [[ "$setting" == 'onSuccess' ]] && is_success=true || is_success=false
+
+  action_wq=$( get_setting "notification.$setting.type" )
+  action=$(echo ${action_wq//\"/""})
+  
+  case $action in
+  email)
+    # todo
+    ;;
+  text)
+    # todo
+    ;;
+  speak)
+    speak $is_success
+    ;;
+  bell)
+    bell $is_success
+    ;;
+  alert)
+    alert $is_success
+    ;;
+  notification)
+    notification $is_success
+    ;;
+  esac
+}
+
+# params:
+# $1: start time
+# $2: "success" or "failure"
+function handle_notify {
+  setting="onSuccess"
+
+  if [[ ! "$NFIN_VOID_TIME" ]]; then
+    type=$2 # "success" or "failure"
+    [[ "$type" == 'success' ]] && is_success=true || is_success=false
+    $is_success && setting="onSuccess" || setting="onError"
+
+    # check if enabled
+    action_enabled=$(get_setting "notification.$setting.enabled" )
+    "$action_enabled" || return 1 # failed to notify -- disabled
+    
+    # check if time elapsed
+    elapsed_time $1 $setting || return 1 # failed to notify -- time constraint
+  fi
+
+  notify $setting && return 0 || return 1
+}
+
