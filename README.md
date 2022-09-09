@@ -16,6 +16,7 @@ Only receive a notification if the command took a configurable amount of time to
 export NFIN_PATH=/path/to/nfin
 export PATH=$PATH:$NFIN_PATH/bin
 ```
+Make sure to run `source ~/.bashrc` or `source ~/.zshrc` before attempting to run this command.
 
 ## Setup
 
