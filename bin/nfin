@@ -89,6 +89,8 @@ source "$NFIN_DIR/internal/notify"
 
 # trap 'handle_notify "$start" "failure" "$?" "$LINENO"' ERR
 
+export NFIN_USER_COMMAND="$@"
+
 start=$(date +%s)
 
 # what do we want to do with the error output?

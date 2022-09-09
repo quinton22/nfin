@@ -6,9 +6,16 @@ source "$NFIN_DIR/internal/get_setting"
 
 function native_notification {
    if [[ "$OS" == 'Darwin' ]]; then
-    $1 && message="succeeded" || message="failed"
-    extra=" $3"
-    osascript -e "display $2 \"Command $message\"${extra-""}" &>/dev/null
+    $1 && title="\"Command succeeded\"" || title="\"Command failed\""
+
+    # todo: capture and display output
+    message="\"$NFIN_USER_COMMAND\""
+
+    [[ "$2" == 'notification' ]] \
+    && content="$message with title \"nFin\" subtitle $title ${3-""}" \
+    || content="$title message $message ${3-""}"
+
+    osascript -e "display $2 $content" &>/dev/null
   fi
   # todo windows
 }
@@ -19,7 +26,7 @@ function alert {
 }
 
 function notification {
-  native_notification $1 'notification' "with title \"nFin\" sound name \"Submarine\""
+  native_notification $1 'notification' "sound name \"Submarine\""
 }
 
 function speak {
