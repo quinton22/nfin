@@ -63,6 +63,9 @@ function notify {
   notification)
     notification $is_success
     ;;
+  *)
+    bell $is_success
+    ;;
   esac
 }
 
