@@ -75,7 +75,7 @@ function notify {
 function handle_notify {
   setting="onSuccess"
 
-  if [[ ! "$NFIN_VOID_TIME" ]]; then
+  if [[ "$NFIN_VOID_TIME" -eq 1 ]]; then
     type=$2 # "success" or "failure"
     [[ "$type" == 'success' ]] && is_success=true || is_success=false
     $is_success && setting="onSuccess" || setting="onError"
