@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+source "$NFIN_DIR/internal/common"
+
+function load_settings {
+  NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE )
+}
+
 function get_setting {
   echo $( echo "$NFIN_CONFIG" | jq ".settings.$1" )
 }
@@ -15,4 +21,8 @@ function export_settings {
   for path in "${paths[@]}"; do
     eval "export $path"
   done
+}
+
+function get_success_or_error_setting {
+  [[ $1 -eq 0 ]] && echo "onSuccess" || echo "onError"
 }

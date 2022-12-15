@@ -4,13 +4,13 @@
       "onSuccess": {
         "enabled": true,
         "onTimeElapsed": true,
-        "time": 15,
+        "time": 30,
         "type": "notification"
       },
       "onError": {
         "enabled": true,
         "onTimeElapsed": true,
-        "time": 15,
+        "time": 30,
         "type": "notification"
       }
     }

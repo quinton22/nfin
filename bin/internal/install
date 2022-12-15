@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+NFIN_HOME="$HOME/.nfin"
+NFIN_ETC_DIR="$NFIN_HOME/etc"
+NFIN_SETTINGS_FILE="$NFIN_ETC_DIR/config.json"
+NFIN_TMP_DIR="$NFIN_HOME/tmp"
+NFIN_VAR_DIR="$NFIN_HOME/var"
+
+if [[ -d "$NFIN_HOME" ]]; then
+  echo "Nfin is already installed. To update, run `nfin update`, or delete ~/.nfin and reinstall."
+  exit 1
+fi
+
+if ! command -v curl > /dev/null; then
+  echo "Please install curl"
+  exit 1
+fi
+
+if ! command -v jq > /dev/null; then
+  echo "Please install jq. On mac: brew install jq"
+  exit 1
+fi
+
+mkdir "$NFIN_HOME"
+mkdir "$NFIN_ETC_DIR"
+mkdir "$NFIN_VAR_DIR"
+mkdir "$NFIN_TMP_DIR"
+
+curl -s https://github.com/quinton22/nfin/archive/refs/heads/main.zip > "$NFIN_TMP_DIR/nfin.zip"
+
+if [[ ! -f "$NFIN_TMP_DIR/nfin.zip" ]]; then
+  echo "Failed to download, please try again."
+  rm -rf "$NFIN_HOME"
+  exit 1;
+fi
+
+unzip -qo "$NFIN_TMP_DIR/nfin.zip" -d "$NFIN_TMP_DIR"
+cp "$NFIN_TMP_DIR/nfin/*" "$NFIN_HOME"
+rm -rf "$NFIN_TMP_DIR/nfin"
+rm -rf "$NFIN_TMP_DIR/nfin.zip"
+cp "$NFIN_HOME/config.template" "$NFIN_SETTINGS_FILE"
+rm -rf "$NFIN_HOME/config.template"
+
+
+rc_file=''
+if [[ -s "${ZDOTDIR:-$HOME}/.zshrc"  ]]; then
+  rc_file="${ZDOTDIR:-$HOME}/.zshrc"
+elif [[ -s "$HOME/.bashrc" ]]; then
+  rc_file="$HOME/.bashrc"
+else
+  rc_file="$HOME/.bash_profile"
+  touch "$rc_file"
+  
+fi
+
+cat << EOF >> "$rc_file"
+
+export NFIN_HOME="$HOME/.nfin"
+[[ -s "$NFIN_HOME/bin/init" ]] && source "$NFIN_HOME/bin/init"
+EOF
+
+
+
+# use https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install

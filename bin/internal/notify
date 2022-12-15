@@ -2,11 +2,21 @@
 
 source "$NFIN_DIR/internal/elapsed_time"
 source "$NFIN_DIR/internal/get_setting"
-. "$NFIN_DIR/internal/common"
+source "$NFIN_DIR/internal/common"
 
 function native_notification {
    if [[ "$OS" == 'Darwin' ]]; then
-    $1 && title="\"Command succeeded\"" || title="\"Command failed\""
+    case $1 in
+      success)
+        local title="\"Command succeeded\""
+        ;;
+      failure)
+        local title="\"Command failed\""
+        ;;
+      *)
+        local title="\"Command finished\""
+        ;;
+    esac
 
     # todo: capture and display output
     message="\"$NFIN_USER_COMMAND\""
@@ -21,7 +31,7 @@ function native_notification {
 }
 
 function alert {
-  $1 && alert_type='informational' || alert_type='critical'
+  [[ "$1" =~ (success|finished) ]] && local alert_type='informational' || local alert_type='critical'
   native_notification $1 'alert' "as $alert_type"
 }
 
@@ -31,25 +41,27 @@ function notification {
 
 function speak {
   if [[ "$OS" == 'Darwin' ]]; then
-    $1 && saying="success" || saying="failure"
-    say "$saying"
+    say $1
   else
     bell $1
   fi
 }
 
 function bell {
-  $1 && num_bells="\a" || num_bells="\a\a"
+  [[ "$1" =~ (finished|success) ]] && num_bells="\a" || num_bells="\a\a"
   echo -en "$num_bells"
 }
 
 
 function notify {
-  setting=$1 # "onSuccess" or "onError"
-  [[ "$setting" == 'onSuccess' ]] && is_success=true || is_success=false
-
+  local setting=$(get_success_or_error_setting ${1:-0})
   action_wq=$( get_setting "notification.$setting.type" )
   action=$(echo ${action_wq//\"/""})
+
+  local finish_type='finished'
+  if [[ ! -z $1 ]]; then
+    [[ $1 -eq 0 ]] && finish_type='success' || finish_type='failure'
+  fi
   
   case $action in
   email)
@@ -59,42 +71,31 @@ function notify {
     # todo
     ;;
   speak)
-    speak $is_success
+    speak $finish_type
     ;;
   bell)
-    bell $is_success
+    bell $finish_type
     ;;
   alert)
-    alert $is_success
+    alert $finish_type
     ;;
   notification)
-    notification $is_success
+    notification $finish_type
     ;;
   *)
-    bell $is_success
+    bell $finish_type
     ;;
   esac
+
+  return $?
 }
 
-# params:
-# $1: start time
-# $2: "success" or "failure"
+# given the start time, end time, & return code, notify or don't
 function handle_notify {
-  setting="onSuccess"
+  load_settings
+  "$(get_setting notification.$(get_success_or_error_setting ${3:-0}).enabled)" || return 1 # failed to notify -- disabled
 
-  if [[ "$NFIN_VOID_TIME" -eq 1 ]]; then
-    type=$2 # "success" or "failure"
-    [[ "$type" == 'success' ]] && is_success=true || is_success=false
-    $is_success && setting="onSuccess" || setting="onError"
+  test_elapsed_time "$@" || return 1
 
-    # check if enabled
-    action_enabled=$(get_setting "notification.$setting.enabled" )
-    "$action_enabled" || return 1 # failed to notify -- disabled
-    
-    # check if time elapsed
-    elapsed_time $1 $setting || return 1 # failed to notify -- time constraint
-  fi
-
-  notify $setting && return 0 || return 1
+  return $(notify $3)
 }
-

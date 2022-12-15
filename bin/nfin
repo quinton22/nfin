@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
 
-# todo
+# todo:
 # - on keyboard interrupt
 # - move declarations to common file
 # - email
 # - text
 # - native notification
+# - install script
+# - update script
 
 # todo need?
 set -e
 
 # load and export configuration
-export NFIN_DIR=$(cd $(dirname "$0") && pwd)
-export NFIN_SETTINGS_FILE="$NFIN_DIR/config.json"
-export NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE )
-export NFIN_VOID_TIME=1
+NFIN_DIR=$(cd $(dirname "$0") && pwd)
+NFIN_SETTINGS_FILE="$NFIN_DIR/config.json"
+NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE )
+
+NFIN_VOID_TIME=1
 
 source "$NFIN_DIR/internal/get_setting"
 
 . "$NFIN_DIR/internal/common"
-
-# todo remove
-# echo "num params: $#"
 
 function parse_args {
   if [[ $# -eq 0 ]]; then
@@ -81,11 +81,14 @@ function parse_args {
   fi
 }
 
-
-
 parse_args "$@"
 
 source "$NFIN_DIR/internal/notify"
+
+if [[ $NFIN_VOID_TIME -eq 0 ]]; then
+  notify
+  exit 0
+fi
 
 # trap 'handle_notify "$start" "failure" "$?" "$LINENO"' ERR
 
@@ -95,9 +98,13 @@ start=$(date +%s)
 
 # what do we want to do with the error output?
 # "$@" 2>/dev/null && outcome='success' || outcome='failure'
-eval "$@" && outcome='success' || outcome='failure'
+eval "$@"
 
-handle_notify "$start" "$outcome"
+return_code=$?
+end=$(date +%s)
+
+handle_notify $start $end $return_code
+
 
 # todo: handle errors from above, but for now...
- [[ "$outcome" == 'success' ]] && exit 0 || exit 1
+exit $return_code

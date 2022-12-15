@@ -3,6 +3,8 @@
 source "$NFIN_DIR/internal/get_setting"
 
 function interactive_settings() {
+  load_settings
+  
   select item in "Display all" "Get" "Set"
   do
     break
