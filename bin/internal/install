@@ -48,35 +48,26 @@ rm -rf "$NFIN_TMP_DIR/*"
 cp "$NFIN_HOME/config.template" "$NFIN_SETTINGS_FILE"
 rm -rf "$NFIN_HOME/config.template"
 
-# zsh
-if [[ -s "${ZDOTDIR:-$HOME}/.zshrc"  ]]; then
-  cat << EOF >> "${ZDOTDIR:-$HOME}/.zshrc"
+function add_to_rc_file {
+  if [[ -s "$1" ]]; then
 
-export NFIN_HOME="$HOME/.nfin"
-[[ -s "$NFIN_HOME/bin/init-zsh" ]] && source "$NFIN_HOME/bin/init-zsh"
+    local check=$(grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' $1 && \
+    grep -q "^[ ]*\[\[ -s \"\$NFIN_HOME/bin/internal/$2\" \]\] && source \"\$NFIN_HOME/bin/internal/$2\"" $1)
+
+    if [[ ! $check -eq 0 ]]; then
+      cat << EOF >> "$rc_file"
+
+export NFIN_HOME="\$HOME/.nfin"
+[[ -s "\$NFIN_HOME/bin/internal/$init_file" ]] && source "\$NFIN_HOME/bin/internal/$init_file"
 EOF
-fi
+    fi
+  else
+    return 1
+  fi
+}
 
-# bash
-if [[ -s "$HOME/.bashrc" ]]; then
-  rc_file=
-
-  cat << EOF >> "$HOME/.bashrc"
-
-export NFIN_HOME="$HOME/.nfin"
-[[ -s "$NFIN_HOME/bin/init-sh" ]] && source "$NFIN_HOME/bin/init-sh"
-EOF
-fi
-
-# unknown/bash
-if
-  rc_file="$HOME/.bash_profile"
-  touch "$rc_file"
-  cat << EOF >> "$rc_file"
-
-export NFIN_HOME="$HOME/.nfin"
-[[ -s "$NFIN_HOME/bin/init" ]] && source "$NFIN_HOME/bin/init"
-EOF
-fi
+add_to_rc_file "${ZDOTDIR:-$HOME}/.zshrc" "init-zsh" || \
+add_to_rc_file "$HOME/.bashrc" "init-sh" || \
+{ touch "$HOME/.bash_profile"; add_to_rc_file "$HOME/.bash_profile" "init"; }
 
 # use https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install
