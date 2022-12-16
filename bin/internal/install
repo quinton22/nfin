@@ -7,8 +7,21 @@ NFIN_TMP_DIR="$NFIN_HOME/tmp"
 NFIN_VAR_DIR="$NFIN_HOME/var"
 
 if [[ -d "$NFIN_HOME" ]]; then
-  echo "Nfin is already installed. To update, run `nfin update`, or delete ~/.nfin and reinstall."
-  exit 1
+  echo 'nFin is already installed. To update, run `nfin update`'
+  echo 'Would like to proceed with a clean install and remove your current ~/.nfin directory? (y/N)'
+  read new_install
+  case $new_install in
+    y|Y|yes|Yes)
+      rm -rf "$HOME/.nfin"
+      ;;
+    n|N|no|No|"")
+      exit 1
+      ;;
+    *)
+      echo "'$new_install' is not a valid response. Please choose (y/N)."
+      exit 1
+      ;;
+  esac
 fi
 
 if ! command -v curl > /dev/null; then
@@ -51,16 +64,15 @@ rm -rf "$NFIN_HOME/config.template"
 function add_to_rc_file {
   if [[ -s "$1" ]]; then
 
-    local check=$(grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' $1 && \
-    grep -q "^[ ]*\[\[ -s \"\$NFIN_HOME/bin/internal/$2\" \]\] && source \"\$NFIN_HOME/bin/internal/$2\"" $1)
-
-    if [[ ! $check -eq 0 ]]; then
-      cat << EOF >> "$rc_file"
+    grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' $1 && \
+    grep -q "^[ ]*\[\[ -s \"\$NFIN_HOME/bin/internal/$2\" \]\] && source \"\$NFIN_HOME/bin/internal/$2\"" $1 || \
+    cat << EOF >> "$1"
 
 export NFIN_HOME="\$HOME/.nfin"
-[[ -s "\$NFIN_HOME/bin/internal/$init_file" ]] && source "\$NFIN_HOME/bin/internal/$init_file"
+[[ -s "\$NFIN_HOME/bin/internal/$2" ]] && source "\$NFIN_HOME/bin/internal/$2"
 EOF
-    fi
+
+    echo "Yay! nFin successfully installed! You can run 'source $1' to use it now, or restart your terminal"
   else
     return 1
   fi
