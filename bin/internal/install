@@ -26,7 +26,7 @@ mkdir "$NFIN_ETC_DIR"
 mkdir "$NFIN_VAR_DIR"
 mkdir "$NFIN_TMP_DIR"
 
-curl -s https://github.com/quinton22/nfin/archive/refs/heads/main.zip > "$NFIN_TMP_DIR/nfin.zip"
+curl 'https://github.com/quinton22/nfin/archive/refs/heads/main.zip' -sL -o "$NFIN_TMP_DIR/nfin.zip"
 
 if [[ ! -f "$NFIN_TMP_DIR/nfin.zip" ]]; then
   echo "Failed to download, please try again."
@@ -35,30 +35,48 @@ if [[ ! -f "$NFIN_TMP_DIR/nfin.zip" ]]; then
 fi
 
 unzip -qo "$NFIN_TMP_DIR/nfin.zip" -d "$NFIN_TMP_DIR"
-cp "$NFIN_TMP_DIR/nfin/*" "$NFIN_HOME"
-rm -rf "$NFIN_TMP_DIR/nfin"
 rm -rf "$NFIN_TMP_DIR/nfin.zip"
+
+for f in $NFIN_TMP_DIR/*; do
+  [[ -d "$f/bin" ]] && \
+  cp -R "$f/bin" "$NFIN_HOME" 2> /dev/null
+   [[ -f "$f/config.template" ]] && \
+  cp "$f/config.template" "$NFIN_HOME" 2> /dev/null
+done
+
+rm -rf "$NFIN_TMP_DIR/*"
 cp "$NFIN_HOME/config.template" "$NFIN_SETTINGS_FILE"
 rm -rf "$NFIN_HOME/config.template"
 
-
-rc_file=''
+# zsh
 if [[ -s "${ZDOTDIR:-$HOME}/.zshrc"  ]]; then
-  rc_file="${ZDOTDIR:-$HOME}/.zshrc"
-elif [[ -s "$HOME/.bashrc" ]]; then
-  rc_file="$HOME/.bashrc"
-else
-  rc_file="$HOME/.bash_profile"
-  touch "$rc_file"
-  
+  cat << EOF >> "${ZDOTDIR:-$HOME}/.zshrc"
+
+export NFIN_HOME="$HOME/.nfin"
+[[ -s "$NFIN_HOME/bin/init-zsh" ]] && source "$NFIN_HOME/bin/init-zsh"
+EOF
 fi
 
-cat << EOF >> "$rc_file"
+# bash
+if [[ -s "$HOME/.bashrc" ]]; then
+  rc_file=
+
+  cat << EOF >> "$HOME/.bashrc"
+
+export NFIN_HOME="$HOME/.nfin"
+[[ -s "$NFIN_HOME/bin/init-sh" ]] && source "$NFIN_HOME/bin/init-sh"
+EOF
+fi
+
+# unknown/bash
+if
+  rc_file="$HOME/.bash_profile"
+  touch "$rc_file"
+  cat << EOF >> "$rc_file"
 
 export NFIN_HOME="$HOME/.nfin"
 [[ -s "$NFIN_HOME/bin/init" ]] && source "$NFIN_HOME/bin/init"
 EOF
-
-
+fi
 
 # use https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install

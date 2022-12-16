@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+export NFIN_DIR=$NFIN_HOME/bin
+export PATH=$PATH:$NFIN_DIR
+
+source "$NFIN_DIR/internal/notify"
+
+function nfin_precmd() {
+  local last_return_code=$?
+  [[ -z $nfin_start_time ]] && return 0
+
+  handle_notify $nfin_start_time $(date +%s) $last_return_code
+  nfin_start_time=
+}
+ 
+
+function nfin_preexec() {
+  nfin_start_time=$(date +%s)
+  NFIN_USER_COMMAND=$1
+
+  # eval "$PROMPT_COMMAND"
+}
+
+
+# TODO
+PROMPT_COMMAND="start_time=$SECONDS; echo \"|$BASH_COMMAND|\"; end_time=$SECONDS;
+elapsed_time=$((end_time - start_time)); echo $elapsed_time"
+
