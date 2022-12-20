@@ -6,13 +6,20 @@ NFIN_SETTINGS_FILE="$NFIN_ETC_DIR/config.json"
 NFIN_TMP_DIR="$NFIN_HOME/tmp"
 NFIN_VAR_DIR="$NFIN_HOME/var"
 
-echo "$@"
+
 
 if [[ -d "$NFIN_HOME" ]]; then
-  echo 'nFin is already installed. To update, run `nfin update`'
-  echo 'If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following \
-  \ncurl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force'
-  exit 1
+  case $1 in
+    -f|--force)
+      'Beginning force install'
+    ;;
+    *)
+      echo 'nFin is already installed. To update, run `nfin update`'
+      echo "If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following \
+      \ncurl -s 'https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install' | bash -s -- --force"
+      exit 1
+    ;;
+  esac
 fi
 
 if ! command -v curl > /dev/null; then
