@@ -2,7 +2,6 @@
 
 OS=$(uname -s)
 NFIN_ETC_DIR="$NFIN_HOME/etc"
-NFIN_SETTINGS_FILE="$NFIN_HOME/config.template"
-# NFIN_SETTINGS_FILE="$NFIN_ETC_DIR/config.json"
+NFIN_SETTINGS_FILE="$NFIN_ETC_DIR/config.json"
 NFIN_TMP_DIR="$NFIN_HOME/tmp"
 NFIN_VAR_DIR="$NFIN_HOME/var"
