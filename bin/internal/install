@@ -15,8 +15,8 @@ if [[ -d "$NFIN_HOME" ]]; then
     ;;
     *)
       echo 'nFin is already installed. To update, run `nfin update`'
-      echo "If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following \
-      \ncurl -s 'https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install' | bash -s -- --force"
+      echo -e 'If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following \
+      \ncurl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force'
       exit 1
     ;;
   esac
