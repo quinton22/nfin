@@ -14,9 +14,9 @@ if [[ -d "$NFIN_HOME" ]]; then
       'Beginning force install'
     ;;
     *)
-      echo 'nFin is already installed. To update, run `nfin update`'
-      echo -e 'If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following \
-      \ncurl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force'
+      echo -e 'nFin is already installed. To update, run:\nnfin update'
+      echo -e 'If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following command:
+\ncurl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force'
       exit 1
     ;;
   esac
@@ -32,10 +32,10 @@ if ! command -v jq > /dev/null; then
   exit 1
 fi
 
-mkdir "$NFIN_HOME"
-mkdir "$NFIN_ETC_DIR"
-mkdir "$NFIN_VAR_DIR"
-mkdir "$NFIN_TMP_DIR"
+mkdir "$NFIN_HOME" 2> /dev/null
+mkdir "$NFIN_ETC_DIR" 2> /dev/null
+mkdir "$NFIN_VAR_DIR" 2> /dev/null
+mkdir "$NFIN_TMP_DIR" 2> /dev/null
 
 curl 'https://github.com/quinton22/nfin/archive/refs/heads/main.zip' -sL -o "$NFIN_TMP_DIR/nfin.zip"
 
@@ -70,7 +70,7 @@ export NFIN_HOME="\$HOME/.nfin"
 [[ -s "\$NFIN_HOME/bin/internal/$2" ]] && source "\$NFIN_HOME/bin/internal/$2"
 EOF
 
-    echo "Yay! nFin successfully installed! You can run 'source $1' to use it now, or restart your terminal"
+    echo -e "Yay! nFin successfully installed! You can run:\nsource $1\nnto use it now, or restart your terminal"
   else
     return 1
   fi
