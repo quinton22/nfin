@@ -11,12 +11,12 @@ NFIN_VAR_DIR="$NFIN_HOME/var"
 if [[ -d "$NFIN_HOME" ]]; then
   case $1 in
     -f|--force)
-      'Beginning force install'
+      echo 'Beginning force install'
     ;;
     *)
-      echo -e 'nFin is already installed. To update, run:\nnfin update'
+      echo -e 'nFin is already installed. To update, run:\n\nnfin update\n'
       echo -e 'If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following command:
-\ncurl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force'
+\ncurl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force\n'
       exit 1
     ;;
   esac
@@ -70,7 +70,7 @@ export NFIN_HOME="\$HOME/.nfin"
 [[ -s "\$NFIN_HOME/bin/internal/$2" ]] && source "\$NFIN_HOME/bin/internal/$2"
 EOF
 
-    echo -e "Yay! nFin successfully installed! You can run:\nsource $1\nnto use it now, or restart your terminal"
+    echo -e "Yay! nFin successfully installed! You can run:\n\nsource $1\n\nto use it now, or restart your terminal"
   else
     return 1
   fi
