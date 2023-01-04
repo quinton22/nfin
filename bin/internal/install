@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
 NFIN_HOME="$HOME/.nfin"
 NFIN_ETC_DIR="$NFIN_HOME/etc"
@@ -6,60 +6,42 @@ NFIN_SETTINGS_FILE="$NFIN_ETC_DIR/config.json"
 NFIN_TMP_DIR="$NFIN_HOME/tmp"
 NFIN_VAR_DIR="$NFIN_HOME/var"
 
+# colors
+# Black        0;30     Dark Gray     1;30
+# Red          0;31     Light Red     1;31
+# Green        0;32     Light Green   1;32
+# Brown/Orange 0;33     Yellow        1;33
+# Blue         0;34     Light Blue    1;34
+# Purple       0;35     Light Purple  1;35
+# Cyan         0;36     Light Cyan    1;36
+# Light Gray   0;37     White         1;37
+set_color() {
+  local brightness=""
+  local color="0"
+  if [ $# -eq 2 ]; then
+    brightness="$1;"
+    color=$2
+  elif [ $# -eq 1 ]; then
+    brightness="0;"
+    color=$1
+  fi
 
+  printf '\033[%sm' "$brightness$color"
+}
 
-if [[ -d "$NFIN_HOME" ]]; then
-  case $1 in
-    -f|--force)
-      echo 'Beginning force install'
-    ;;
-    *)
-      echo -e 'nFin is already installed. To update, run:\n\nnfin update\n'
-      echo -e 'If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following command:
-\ncurl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force\n'
-      exit 1
-    ;;
-  esac
-fi
+print_command() {
+  printf "$(set_color 35)$1$(set_color)"
+}
 
-if ! command -v curl > /dev/null; then
-  echo "Please install curl"
-  exit 1
-fi
+download() {
+  if command -v curl > /dev/null; then
+    curl -fsSL "$1" > "$2"
+  else
+    wget -qO- "$1" > "$2"
+  fi
+}
 
-if ! command -v jq > /dev/null; then
-  echo "Please install jq. On mac: brew install jq"
-  exit 1
-fi
-
-mkdir "$NFIN_HOME" 2> /dev/null
-mkdir "$NFIN_ETC_DIR" 2> /dev/null
-mkdir "$NFIN_VAR_DIR" 2> /dev/null
-mkdir "$NFIN_TMP_DIR" 2> /dev/null
-
-curl 'https://github.com/quinton22/nfin/archive/refs/heads/main.zip' -sL -o "$NFIN_TMP_DIR/nfin.zip"
-
-if [[ ! -f "$NFIN_TMP_DIR/nfin.zip" ]]; then
-  echo "Failed to download, please try again."
-  rm -rf "$NFIN_HOME"
-  exit 1;
-fi
-
-unzip -qo "$NFIN_TMP_DIR/nfin.zip" -d "$NFIN_TMP_DIR"
-rm -rf "$NFIN_TMP_DIR/nfin.zip"
-
-for f in $NFIN_TMP_DIR/*; do
-  [[ -d "$f/bin" ]] && \
-  cp -R "$f/bin" "$NFIN_HOME" 2> /dev/null
-   [[ -f "$f/config.template" ]] && \
-  cp "$f/config.template" "$NFIN_HOME" 2> /dev/null
-done
-
-rm -rf "$NFIN_TMP_DIR/*"
-cp "$NFIN_HOME/config.template" "$NFIN_SETTINGS_FILE"
-rm -rf "$NFIN_HOME/config.template"
-
-function add_to_rc_file {
+add_to_rc_file() {
   if [[ -s "$1" ]]; then
 
     grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' $1 && \
@@ -70,14 +52,62 @@ export NFIN_HOME="\$HOME/.nfin"
 [[ -s "\$NFIN_HOME/bin/internal/$2" ]] && source "\$NFIN_HOME/bin/internal/$2"
 EOF
 
-    echo -e "Yay! nFin successfully installed! You can run:\n\nsource $1\n\nto use it now, or restart your terminal"
+    printf "$(set_color 32)Yay! nFin successfully installed!$(set_color) You can run:\n\n$(print_command "source $1")\n\nto use it now, or restart your terminal"
   else
     return 1
   fi
 }
 
-add_to_rc_file "${ZDOTDIR:-$HOME}/.zshrc" "init-zsh" || \
-add_to_rc_file "$HOME/.bashrc" "init-sh" || \
-{ touch "$HOME/.bash_profile"; add_to_rc_file "$HOME/.bash_profile" "init"; }
+install() {
+  if [[ -d "$NFIN_HOME" ]]; then
+    case $1 in
+      -f|--force)
+        printf "$(set_color 36)Beginning force install$(set_color)\n"
+      ;;
+      *)
+        printf "nFin is already installed. To update, run:\n\n$(print_command 'nfin update')\n\n"
+        printf "If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following command:
+  \n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force')\n\n"
+        exit 1
+      ;;
+    esac
+  fi
 
-# use https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install
+  if ! command -v jq > /dev/null; then
+    printf "Please install jq. On mac:\n$(set_color 35)brew install jq$(set_color)\n"
+    exit 1
+  fi
+
+  mkdir "$NFIN_HOME" 2> /dev/null
+  mkdir "$NFIN_ETC_DIR" 2> /dev/null
+  mkdir "$NFIN_VAR_DIR" 2> /dev/null
+  mkdir "$NFIN_TMP_DIR" 2> /dev/null
+
+  download 'https://github.com/quinton22/nfin/archive/refs/heads/main.zip' "$NFIN_TMP_DIR/nfin.zip"
+
+  if [[ ! -f "$NFIN_TMP_DIR/nfin.zip" ]]; then
+    printf "$(set_color 31)Failed to download.$(set_color) Please try again.\n"
+    rm -rf "$NFIN_HOME"
+    exit 1;
+  fi
+
+  unzip -qo "$NFIN_TMP_DIR/nfin.zip" -d "$NFIN_TMP_DIR"
+  rm -rf "$NFIN_TMP_DIR/nfin.zip"
+
+  for f in $NFIN_TMP_DIR/*; do
+    [[ -d "$f/bin" ]] && \
+    cp -R "$f/bin" "$NFIN_HOME" 2> /dev/null
+    [[ -f "$f/config.template" ]] && \
+    cp "$f/config.template" "$NFIN_HOME" 2> /dev/null
+  done
+
+  rm -rf "$NFIN_TMP_DIR/*"
+  cp "$NFIN_HOME/config.template" "$NFIN_SETTINGS_FILE"
+  rm -rf "$NFIN_HOME/config.template"
+
+  add_to_rc_file "${ZDOTDIR:-$HOME}/.zshrc" "init-zsh" || \
+  add_to_rc_file "$HOME/.bashrc" "init-sh" || \
+  { touch "$HOME/.bash_profile"; add_to_rc_file "$HOME/.bash_profile" "init"; }
+}
+
+install || return 1

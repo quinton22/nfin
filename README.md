@@ -10,27 +10,28 @@ Only receive a notification if the command took a configurable amount of time to
 
 ## Installation
 
-1. Clone the repo
-2. Add the following lines to your ~/.bashrc, ~/.zshrc, or the like.
-
-```shell
-export NFIN_PATH=/path/to/nfin
-export PATH=$PATH:$NFIN_PATH/bin
-```
-
-Make sure to run `source ~/.bashrc` or `source ~/.zshrc` before attempting to run this command.
+1. Run the following in your terminal
+   `curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash`
 
 ## Setup
 
 _Development is still in progress, but for now:_
 
-Set up the config.json file in the nfin/ directory. This will soon move to ~/.nfin/config.json. You can:
+Set up the config.json file in the ~/.nfin directory. You can:
 
 1. Manually replace items in the config.json file directory
 2. Run `nfin -c settings` for an interactive setup
 3. Run `nfin -c <setting.separated.by.dots> <setting_value>` to set an individual setting value [\*\*](#still-under-development)
 
 ## Usage
+
+There are multiple ways to use nFin:
+
+### Automatic
+
+Currently only supported for zsh
+
+1. This is the default, any time a command is run in the terminal, if it takes longer than the configured amount of time, you will get a notification.
 
 ### Command line
 
