@@ -11,7 +11,7 @@ Only receive a notification if the command took a configurable amount of time to
 ## Installation
 
 1. Run the following in your terminal
-   `curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash`
+   `curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | sh`
 
 ## Setup
 

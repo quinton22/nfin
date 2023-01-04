@@ -42,32 +42,32 @@ download() {
 }
 
 add_to_rc_file() {
-  if [[ -s "$1" ]]; then
+  if [ -s "$1" ]; then
 
     grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' $1 && \
     grep -q "^[ ]*\[\[ -s \"\$NFIN_HOME/bin/internal/$2\" \]\] && source \"\$NFIN_HOME/bin/internal/$2\"" $1 || \
     cat << EOF >> "$1"
 
 export NFIN_HOME="\$HOME/.nfin"
-[[ -s "\$NFIN_HOME/bin/internal/$2" ]] && source "\$NFIN_HOME/bin/internal/$2"
+[ -s "\$NFIN_HOME/bin/internal/$2" ] && source "\$NFIN_HOME/bin/internal/$2"
 EOF
 
-    printf "$(set_color 32)Yay! nFin successfully installed!$(set_color) You can run:\n\n$(print_command "source $1")\n\nto use it now, or restart your terminal"
+    printf "$(set_color 1 32)Yay! nFin successfully installed!$(set_color)\nYou can run:\n\n$(print_command "source $1")\n\nto use it now, or restart your terminal\n"
   else
     return 1
   fi
 }
 
 install() {
-  if [[ -d "$NFIN_HOME" ]]; then
+  if [ -d "$NFIN_HOME" ]; then
     case $1 in
       -f|--force)
-        printf "$(set_color 36)Beginning force install$(set_color)\n"
+        printf "Beginning force install\n"
       ;;
       *)
         printf "nFin is already installed. To update, run:\n\n$(print_command 'nfin update')\n\n"
         printf "If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following command:
-  \n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force')\n\nThis will reset your settings."
+  \n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | sh -s -- --force')\n\nThis will reset your settings."
         exit 1
       ;;
     esac
@@ -85,7 +85,7 @@ install() {
 
   download 'https://github.com/quinton22/nfin/archive/refs/heads/main.zip' "$NFIN_TMP_DIR/nfin.zip"
 
-  if [[ ! -f "$NFIN_TMP_DIR/nfin.zip" ]]; then
+  if [ ! -f "$NFIN_TMP_DIR/nfin.zip" ]; then
     printf "$(set_color 31)Failed to download.$(set_color) Please try again.\n"
     rm -rf "$NFIN_HOME"
     exit 1;
@@ -95,9 +95,9 @@ install() {
   rm -rf "$NFIN_TMP_DIR/nfin.zip"
 
   for f in $NFIN_TMP_DIR/*; do
-    [[ -d "$f/bin" ]] && \
+    [ -d "$f/bin" ] && \
     cp -R "$f/bin" "$NFIN_HOME" 2> /dev/null
-    [[ -f "$f/config.template" ]] && \
+    [ -f "$f/config.template" ] && \
     cp "$f/config.template" "$NFIN_HOME" 2> /dev/null
   done
 
