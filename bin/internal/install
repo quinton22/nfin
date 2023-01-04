@@ -67,7 +67,7 @@ install() {
       *)
         printf "nFin is already installed. To update, run:\n\n$(print_command 'nfin update')\n\n"
         printf "If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following command:
-  \n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force')\n\n"
+  \n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force')\n\nThis will reset your settings."
         exit 1
       ;;
     esac
@@ -110,4 +110,4 @@ install() {
   { touch "$HOME/.bash_profile"; add_to_rc_file "$HOME/.bash_profile" "init"; }
 }
 
-install || return 1
+install $@ || return 1
