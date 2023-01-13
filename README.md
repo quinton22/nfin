@@ -11,7 +11,7 @@ Only receive a notification if the command took a configurable amount of time to
 ## Installation
 
 1. Run the following in your terminal
-   `curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | sh`
+   `curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash`
 
 ## Setup
 
@@ -19,9 +19,8 @@ _Development is still in progress, but for now:_
 
 Set up the config.json file in the ~/.nfin directory. You can:
 
-1. Manually replace items in the config.json file directory
-2. Run `nfin -c settings` for an interactive setup
-3. Run `nfin -c <setting.separated.by.dots> <setting_value>` to set an individual setting value [\*\*](#still-under-development)
+- Run `nfin -c settings` for an interactive setup
+- Run `nfin -c <setting.separated.by.dots> <setting_value>` to set an individual setting value [\*\*](#still-under-development)
 
 ## Usage
 

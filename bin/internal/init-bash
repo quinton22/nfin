@@ -23,6 +23,6 @@ function nfin_preexec() {
 
 
 # TODO
-PROMPT_COMMAND="start_time=$SECONDS; echo \"|$BASH_COMMAND|\"; end_time=$SECONDS;
-elapsed_time=$((end_time - start_time)); echo $elapsed_time"
+# PROMPT_COMMAND="start_time=$SECONDS; echo \"|$BASH_COMMAND|\"; end_time=$SECONDS;
+# elapsed_time=$((end_time - start_time)); echo $elapsed_time"
 

@@ -1,10 +1,12 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 NFIN_HOME="$HOME/.nfin"
 NFIN_ETC_DIR="$NFIN_HOME/etc"
 NFIN_SETTINGS_FILE="$NFIN_ETC_DIR/config.json"
 NFIN_TMP_DIR="$NFIN_HOME/tmp"
 NFIN_VAR_DIR="$NFIN_HOME/var"
+
+version_reg='^((v?[0-9]+(\.[0-9]+){0,2})|latest)(-[a-z]+)?$'
 
 # colors
 # Black        0;30     Dark Gray     1;30
@@ -15,6 +17,11 @@ NFIN_VAR_DIR="$NFIN_HOME/var"
 # Purple       0;35     Light Purple  1;35
 # Cyan         0;36     Light Cyan    1;36
 # Light Gray   0;37     White         1;37
+
+# code 35
+# path 34
+# fail 31
+# success 32
 set_color() {
   local brightness=""
   local color="0"
@@ -33,6 +40,170 @@ print_command() {
   printf "$(set_color 35)$1$(set_color)"
 }
 
+print_main_help() {
+  printf "\nInstall nFin\n\n"
+  printf "Usage:\n"
+  printf "\n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- [options]')\n\n"
+  printf "Options:\n\n"
+  printf "$(print_command '-h, --help')\tSee help\n"
+  printf "$(print_command '-f, --force')\tForce install, overwriting current install and settings\n"
+  printf "$(print_command '<version>')\tany acceptable version number matching the regex "
+  printf "$(set_color 35)$version_reg$(set_color) (ex. 1, 1.0, 1.0.0, v1.0, v1.0-beta, v1-any, latest, or latest-alpha)\n"
+}
+
+help_arg=false
+force_arg=false
+list_versions_arg=false
+version_arg='latest'
+version_url=''
+
+parse_args() {
+  local arg
+
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help)
+        help_arg=true ;;
+      -f|--force)
+        force_arg=true ;;
+      -l|--list-versions|--list)
+        list_versions_arg=true ;;
+      *)
+        if echo "$arg" | grep -qE "$version_reg"; then
+          version_arg="$arg"
+        else
+          printf "Oops, nFin doesn't support argument '$arg'. See help:\n"
+          print_main_help
+          exit 1
+        fi
+      ;;
+    esac
+  done
+}
+
+get_version_json() {
+  curl -fsSL 'https://api.github.com/repos/quinton22/nfin/releases'
+}
+
+list_versions() {
+  local version_json version_list version release
+  IFS=- read -r version release <<< "$1"
+  version=${version#v}
+  version_json=$(get_version_json)
+
+  if [ "$version" = 'latest' ]; then
+    version_list=$(echo $version_json | jq -r 'sort_by(.name) | .[].name')
+  else
+    version_list=$(echo $version_json | jq -r "map(select(.name | startswith(\"v$version\"))) | sort_by(.name) | .[].name")
+  fi
+
+  if [ -n "$version_list" ]; then
+    printf "\nVersions:\n"
+    printf "$version_list\n"
+  else
+    printf "\nCould not find any versions matching $(set_color 35)$version$(set_color)\n"
+  fi
+}
+
+get_release_snippet() {
+  printf "if \"$1\" == \"\" then contains(\"-\") | not elif \"$1\" == \"any\" then true else endswith(\"$1\") end"
+}
+
+# params:
+# $1: version_json
+# $2: release type
+get_latest() {
+  echo $(echo $1 | jq "map(select(.name | $(get_release_snippet $2) )) | sort_by(.name) | reverse | .[0]")
+}
+
+# params:
+# $1: version_json
+# $2: version
+# $3: release type
+get_specific_version() {
+  echo $(echo $1 | jq "map(select(.name | startswith(\"v$2\") and $(get_release_snippet $3))) | sort_by(.name) | reverse | .[0]")
+}
+
+# params:
+# $1: version_json
+# $2: version
+# $3: release type
+get_version() {
+  if [ "$2" = 'latest' ]; then
+    echo $(get_latest "$1" "$3")
+  else
+    echo $(get_specific_version "$1" "$2" "$3")
+  fi
+}
+
+get_closest_version() {
+  local other_version_obj version matching_version
+  version="${2#v}"
+
+  while : ; do
+    if [ "$3" = '' ]; then
+      # look for alpha/beta/etc
+      other_version_obj=$(get_version "$1" "$version" 'any')
+    elif [ "$3" != 'any' ]; then
+      # look for a regular version type
+      other_version_obj=$(get_version "$1" "$version" '')
+    fi
+
+    if [ "$other_version_obj" != 'null' ]; then
+      echo "$other_version_obj"
+      return 0
+    fi
+
+    echo "$version" | grep -qE '\.' || break
+
+    version="${version%.*}"
+  done
+
+  echo 'null'
+  return 1
+}
+
+get_matching_version_url() {
+  local version release version_json
+  IFS=- read -r version release <<< "$1"
+  version="${version#v}"
+
+  version_json=$(get_version_json)
+ 
+  local matching_version_obj matching_version
+
+  matching_version_obj=$(get_version "${version_json[@]}" "$version" "$release")
+
+  if [ "$matching_version_obj" = 'null' ]; then
+    matching_version_obj=$(get_closest_version "${version_json[@]}" "$version" "$release")
+
+    if [ "$matching_version_obj" != 'null' ]; then
+      matching_version=$(echo $matching_version_obj | jq -r '.name')
+      if $force_arg; then
+        printf "Installing $(set_color 35)$matching_version$(set_color)\n"
+      else
+        printf "Closest version found: $(set_color 35)$matching_version$(set_color)\n"
+        printf "If you wish to install this version run either of the following commands:\n"
+        printf "\n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- '$matching_version)\n"
+        printf "\n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force v'$version)\n\n"
+        exit 1
+      fi
+    else 
+      printf "Could not find a matching version for version: v$version\n"
+      printf "Run the following to install the latest version:\n"
+      printf "\n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- latest')\n\n"
+      printf "You can also list all the versions available with the following command:"
+      printf "\n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --list-versions')\n\n"
+      exit 1
+    fi
+  # else
+  #   matching_version=$(echo $matching_version_obj | jq -r '.name')
+  #   download_url=$(echo $matching_version_obj | jq -r ".${2%%.*}ball_url")
+  fi
+
+  version_url=$(echo $matching_version_obj | jq -r ".${2%%.*}ball_url")
+}
+
 download() {
   if command -v curl > /dev/null; then
     curl -fsSL "$1" > "$2"
@@ -43,40 +214,73 @@ download() {
 
 add_to_rc_file() {
   if [ -s "$1" ]; then
-
-    grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' $1 && \
-    grep -q "^[ ]*\[\[ -s \"\$NFIN_HOME/bin/internal/$2\" \]\] && source \"\$NFIN_HOME/bin/internal/$2\"" $1 || \
-    cat << EOF >> "$1"
+    if ! (grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' "$1" && grep -q "^[ ]*\[ -s \"\$NFIN_HOME/bin/internal/$2\" \] && source \"\$NFIN_HOME/bin/internal/$2\"" "$1"); then
+      cat << EOF >> "$1"
 
 export NFIN_HOME="\$HOME/.nfin"
 [ -s "\$NFIN_HOME/bin/internal/$2" ] && source "\$NFIN_HOME/bin/internal/$2"
 EOF
 
-    printf "$(set_color 1 32)Yay! nFin successfully installed!$(set_color)\nYou can run:\n\n$(print_command "source $1")\n\nto use it now, or restart your terminal\n"
+      printf "Adding code to $(set_color 34)$1$(set_color)\n"
+    fi
   else
     return 1
   fi
 }
 
 install() {
-  if [ -d "$NFIN_HOME" ]; then
-    case $1 in
-      -f|--force)
-        printf "Beginning force install\n"
-      ;;
-      *)
-        printf "nFin is already installed. To update, run:\n\n$(print_command 'nfin update')\n\n"
-        printf "If you would like to proceed with a clean install and remove your current ~/.nfin directory, run the following command:
-  \n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | sh -s -- --force')\n\nThis will reset your settings."
-        exit 1
-      ;;
-    esac
+  parse_args "$@"
+
+  if $help_arg; then
+    print_main_help
+    exit 0
   fi
+
+  if $list_versions_arg; then
+    list_versions "$version_arg"
+    exit 0
+  fi
+
+  if [ -d "$NFIN_HOME" ]; then
+    if $force_arg; then
+      printf "Beginning force install\n"
+    else
+      printf "nFin is already installed. To update, run:\n\n$(print_command 'nfin update')\n\n"
+      printf "If you would like to proceed with a clean install, deleting all updated settings, run the following command:
+\n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force')\n\n"
+      printf "You can also force install a specific version with the following command:"
+      printf "\n\n$(print_command 'curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash -s -- --force <version>')\n\n"
+      printf "Where $(set_color 35)<version>$(set_color) is any acceptable version number matching the regex\n"
+      printf "$(set_color 35)$version_reg$(set_color) (ex. 1, 1.0, 1.0.0, v1.0, v1.0-beta, v1-any, latest, or latest-alpha)\n"
+      exit 1
+    fi
+  fi
+
+  # TODO:
+  # Does release with version $version_arg exist?
+  # Get that release
+  # https://github.com/quinton22/nfin/archive/refs/tags/v0.1.0-alpha.zip or .tar.gz
 
   if ! command -v jq > /dev/null; then
     printf "Please install jq. On mac:\n$(set_color 35)brew install jq$(set_color)\n"
     exit 1
   fi
+
+  local file_type
+
+  if command -v unzip > /dev/null; then
+    file_type='zip'
+  elif command -v tar > /dev/null; then
+    file_type='tar.gz'
+  else
+    printf "Could not unzip. Please install either $(set_color 35)unzip$(set_color) or $(set_color 35)tar$(set_color).\n"
+    exit 1
+  fi
+
+  get_matching_version_url "$version_arg" "$file_type"
+
+  echo "$version_url"
+  exit 0
 
   mkdir "$NFIN_HOME" 2> /dev/null
   mkdir "$NFIN_ETC_DIR" 2> /dev/null
@@ -101,13 +305,35 @@ install() {
     cp "$f/config.template" "$NFIN_HOME" 2> /dev/null
   done
 
-  rm -rf "$NFIN_TMP_DIR/*"
+  rm -rf "$NFIN_TMP_DIR"/*
   cp "$NFIN_HOME/config.template" "$NFIN_SETTINGS_FILE"
   rm -rf "$NFIN_HOME/config.template"
 
-  add_to_rc_file "${ZDOTDIR:-$HOME}/.zshrc" "init-zsh" || \
-  add_to_rc_file "$HOME/.bashrc" "init-sh" || \
-  { touch "$HOME/.bash_profile"; add_to_rc_file "$HOME/.bash_profile" "init"; }
+  local initzsh initbash initsh
+
+  add_to_rc_file "${ZDOTDIR:-$HOME}/.zshrc" "init-zsh" && initzsh=0 || initzsh=1
+  add_to_rc_file "$HOME/.bashrc" "init-bash" && initbash=0 || initbash=1
+
+  ( add_to_rc_file "$HOME/.bash_profile" "init" || add_to_rc_file "$HOME/.bash_login" "init" || add_to_rc_file "$HOME/.profile" "init" ) \
+  && initsh=0 || initsh=1
+
+  echo "$initzsh $initbash $initsh"
+
+  if [ "$initzsh" -eq 1 ] && [ "$initbash" -eq 1 ] && [ "$initsh" -eq 1 ]; then
+      touch "$HOME/.bash_profile"
+      initsh=$(add_to_rc_file "$HOME/.bash_profile" "init")
+  fi
+
+  if [ ! "$initzsh" -eq 1 ] || [ ! "$initbash" -eq 1 ] || [ ! "$initsh" -eq 1 ]; then
+    printf "\n$(set_color 1 32)Yay! nFin successfully installed!$(set_color)\nYou can run:\n"
+    printf "\n$(print_command "source $1")\n\nto use it now, or restart your terminal\n"
+  else
+    printf "\n$(set_color 31)Oops! Something went wrong.$(set_color)\nCould not add initialization code to an rc file.\n"
+    printf "For nfin too work properly please add the following code to a\n"
+    printf "$(set_color 34).zshrc$(set_color), $(set_color 34).bashrc$(set_color), $(set_color 34).bash_profile$(set_color), or $(set_color 34).profile$(set_color) file"
+    printf " (commonly found in the your $(set_color 34)$HOME$(set_color) or $(set_color 34)~$(set_color) directory)\n"
+    printf "\n$(print_command 'export NFIN_HOME="$HOME/.nfin"\n[ -s "$NFIN_HOME/bin/internal/init" ] && source "$NFIN_HOME/bin/internal/init')\n\n"
+  fi
 }
 
-install $@ || return 1
+install "$@" || return 1
