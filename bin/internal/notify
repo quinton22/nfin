@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-source "$NFIN_DIR/internal/elapsed_time"
 source "$NFIN_DIR/internal/get_setting"
 source "$NFIN_DIR/internal/common"
 
@@ -10,7 +9,7 @@ function native_notification {
       success)
         local title="\"Command succeeded\""
         ;;
-      failure)
+      error)
         local title="\"Command failed\""
         ;;
       *)
@@ -52,50 +51,18 @@ function bell {
   echo -en "$num_bells"
 }
 
-
+# $1: return code
+# $2: start time
+# $3: end time
 function notify {
-  local setting=$(get_success_or_error_setting ${1:-0})
-  action_wq=$( get_setting "notification.$setting.type" )
-  action=$(echo ${action_wq//\"/""})
+  local elapsed_time=$((${3:-0} - ${2:-1}))
+  local notification_type=$(get_notification_type "${1:-0}" "$elapsed_time")
 
   local finish_type='finished'
-  if [[ ! -z $1 ]]; then
-    [[ $1 -eq 0 ]] && finish_type='success' || finish_type='failure'
+  if [ -n "$1" ]; then
+    [ "$1" -eq 0 ] && finish_type='success' || finish_type='error'
   fi
-  
-  case $action in
-  email)
-    # todo
-    ;;
-  text)
-    # todo
-    ;;
-  speak)
-    speak $finish_type
-    ;;
-  bell)
-    bell $finish_type
-    ;;
-  alert)
-    alert $finish_type
-    ;;
-  notification)
-    notification $finish_type
-    ;;
-  *)
-    bell $finish_type
-    ;;
-  esac
 
+  $notification_type
   return $?
-}
-
-# given the start time, end time, & return code, notify or don't
-function handle_notify {
-  load_settings
-  "$(get_setting notification.$(get_success_or_error_setting ${3:-0}).enabled)" || return 1 # failed to notify -- disabled
-
-  test_elapsed_time "$@" || return 1
-
-  return $(notify $3)
 }

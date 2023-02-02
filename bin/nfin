@@ -8,103 +8,116 @@
 # - native notification
 # - install script
 # - update script
+# - ignore certain commands (e.g. man)
 
 # todo need?
 set -e
 
 # load and export configuration
-NFIN_DIR=$(cd $(dirname "$0") && pwd)
-NFIN_SETTINGS_FILE="$NFIN_DIR/config.json"
+: ${NFIN_DIR:=$(cd $(dirname "$0") && pwd)}
+: ${NFIN_HOME:=$NFIN_DIR/..}
+NFIN_SETTINGS_FILE="$NFIN_HOME/etc/config.json"
 NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE )
 
-NFIN_VOID_TIME=1
-
 source "$NFIN_DIR/internal/get_setting"
+source "$NFIN_DIR/internal/common"
 
-. "$NFIN_DIR/internal/common"
+supported_args='-c|--config|-h|--help'
+supported_args=$( echo "^$supported_args$" | sed 's/|/$|^/g' )
+local_changes_only=false
+
+function process_arg {
+  local formal_arg=$1
+  shift 1
+  local arg_opts="$@"
+  case "$formal_arg" in
+    -c|--config)
+      source "$NFIN_DIR/internal/config"
+      config "$@"
+    ;;
+    -h|--help)
+      source "$NFIN_DIR/internal/help"
+      nfin_help "$@"
+      exit 0
+    ;;
+    *) 
+      echo "Unsupported argument: $formal_arg"
+      source "$NFIN_DIR/internal/help"
+      nfin_usage
+      exit 0
+    ;;
+  esac
+}
 
 function parse_args {
-  if [[ $# -eq 0 ]]; then
-    NFIN_VOID_TIME=0
-  elif [[ $# -ge 1 ]] && [[ $1 == -* ]]; then
-    arg_start_indices=()
-    count=0; for arg in "$@"; do
-      if [[ $arg == -* ]]; then
-        arg_start_indices+=( "$count" )
+  local arg
+  local args=()
+  local all_args=( "$@" )
+
+  for i in "${!all_args[@]}"; do
+    arg=${all_args[$i]}
+    if [ "$arg" = -- ]; then
+      (( i+=1 ))
+      break
+    fi
+    if [[ $arg =~ $supported_args ]]; then
+      if [ "${#args[@]}" -gt 0 ]; then
+        process_arg "${args[@]}"
       fi
-      ((++count))
-    done
 
-    for (( i=0; i<"${#arg_start_indices[@]}"; i+=2 )); do
-      index_1="${arg_start_indices[$i]}"
-      # the first index is also the last
-      [[ "$index_1" -eq "${arg_start_indices[@]: -1:1}" ]] && index_2="$#" || index_2="${arg_start_indices[$(($i+1))]}"
-      
-      params=("${@:$(($index_1+1)):$(($index_2-$index_1))}")
+      args=( "$arg" )
+    else
+      if [ ! "${#args[@]}" -eq 0 ]; then
+        args+=( "$arg" )
+      elif [ $arg = -* ]; then
+        process_arg "$arg"
+      else
+        break
+      fi
+    fi
+  done
 
-      case "${params[0]}" in
-        -c|--config)
-          # todo: expect params length == 2 or 3
-          case "${params[1]}" in
-            settings)
-              source "$NFIN_DIR/internal/interactive_settings"
-              interactive_settings
-              exit 0
-              ;;
-            *)
-              # for each pair, try to set the setting
-              settings_list="${@:2}"
-              for (( i=0; i < ${#settings_list[@]} - 1; i+=2)); do
-                j=$(( $i+1 ))
-                echo "${settings_list["$i":"$j"]}"
-              done
-              exit 0
-              ;;
-          esac
-          ;;
-        -h|--help)
-          #todo print help
-          if [[ "${params[1]}" ]]; then
-            case "${params[1]}" in
-              *)
-                echo "print help for command ${params[1]} here"
-                ;;
-            esac
-          else
-            echo "print all of help here"
-          fi
-          exit 0
-          ;;
-      esac
-        
-    done
+  if [ "${#args[@]}" -gt 0 ]; then
+    process_arg "${args[@]}"
+  fi
+
+  NFIN_USER_COMMAND="${all_args[@]:$i}"
+
+  if [ -n  "$NFIN_USER_COMMAND" ]; then
+    local_changes_only=true
   fi
 }
 
-parse_args "$@"
-
 source "$NFIN_DIR/internal/notify"
 
-if [[ $NFIN_VOID_TIME -eq 0 ]]; then
+if [ "$#" -eq 0 ]; then
   notify
   exit 0
 fi
 
-# trap 'handle_notify "$start" "failure" "$?" "$LINENO"' ERR
+NFIN_USER_COMMAND=
 
-export NFIN_USER_COMMAND="$@"
+parse_args "$@"
+
+export NFIN_USER_COMMAND
+
+if [ -z "$NFIN_USER_COMMAND" ]; then
+  exit 0
+fi
+
+# trap 'notify "$start" "failure" "$?" "$LINENO"' ERR
 
 start=$(date +%s)
 
 # what do we want to do with the error output?
 # "$@" 2>/dev/null && outcome='success' || outcome='failure'
-eval "$@"
+
+$NFIN_USER_COMMAND
 
 return_code=$?
 end=$(date +%s)
 
-handle_notify $start $end $return_code
-
+notify $return_code $start $end 
 
 # todo: handle errors from above, but for now...
 exit $return_code

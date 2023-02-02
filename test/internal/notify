@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+pwd="$(cd $(dirname $0) && pwd)/$(basename $0)"
+file_to_test=${pwd/test/bin}
+file_to_test=${file_to_test##*/bin/}
+source "$NFIN_HOME/bin/$file_to_test"
+
+echo "$(notify 0 0 1)"
+echo "$(notify 1 0 1)"
+echo "$(notify 0)"

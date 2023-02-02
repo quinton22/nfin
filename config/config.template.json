@@ -1,0 +1,17 @@
+{
+  "notification": [
+    {
+      "on": "success",
+      "enabled": true,
+      "minTime": 15,
+      "type": "notification"
+    },
+    {
+      "on": "error",
+      "enabled": true,
+      "minTime": 15,
+      "type": "notification"
+    }
+  ],
+  "ignore": ["man"]
+}

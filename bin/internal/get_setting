@@ -2,27 +2,138 @@
 
 source "$NFIN_DIR/internal/common"
 
+function load {
+  NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE 2>/dev/null )
+  NFIN_CONFIG_TYPE=$( cat $NFIN_SETTINGS_TYPE 2>/dev/null )
+}
+
+# $1: index
+# $2: value
+function verify_type {
+  if [ -z "$NFIN_CONFIG" ]; then
+    load
+  fi
+
+  local config type
+  config=$(echo "$NFIN_CONFIG" | jq ".notification.[$1]")
+  type=$(echo "$NFIN_CONFIG_TYPE" | jq ".notification.arrayValue")
+
+  local value value_type constraint_type required allowed 
+  value=$(echo "$config" | jq -r ".$2") 
+  value_type=$(echo "$config" | jq -r ".$2 | type")
+  constraint_type=$(echo "$type" | jq -r ".$2.type")
+  required=$(echo "$type" | jq -r ".$2.required")
+
+  if [ "$value" = 'null' ]; then
+    $required && return 1 || return 0
+  fi
+
+  if [ "$constraint_type" = 'string' ]; then
+    allowed=$(echo "$NFIN_CONFIG_TYPE" | jq -r ".notification.arrayValue.$2.values")
+    if [ "$allowed" != "null" ] && ! [[ " ${allowed[@]} " =~ " $value " ]]; then
+      printf "Uh oh... typecheck failed on config file.\n\n" >&2
+      printf "The notification setting at index %s/n" "$1" >&2
+      printf "%sshould be one of the following values:" "$2" >&2
+      IFS='\n' printf "%s" "${allowed[@]}" >&2
+
+      return 1
+    fi
+  fi
+
+  if [ "$value_type" != "$constraint_type" ]; then
+    printf "Uh oh... typecheck failed on config file.\n\n" >&2
+    printf "The notification setting at index %s/n" "$1" >&2
+    printf "%sshould be type '%s' but was type '%s'" "$2" "$constraint_type" "$value_type" >&2
+    return 1
+  fi
+
+  return 0
+}
+
 function load_settings {
-  NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE )
+  load
+
+  local o_sum n_sum 
+
+  if [ -s "$NFIN_ETC_DIR/.config_hash" ]; then
+    o_sum=$(cat $NFIN_ETC_DIR/.config_hash)
+
+    if command -v sha256sum > /dev/null; then
+      n_sum=$(sha256sum "$NFIN_SETTINGS_FILE")
+    elif command -v openssl > /dev/null; then
+      n_sum=$(openssl sha256 "$NFIN_SETTINGS_FILE" | sed -nE 's/^.*= ([[:alnum:]]+).*$/\1/p')
+    fi
+
+    if [ "$o_sum" = "$n_sum" ]; then
+      return 0 # settings file is not dirty
+    fi
+  fi
+
+
+  # settings file is dirty, so verify the types
+
+  local length=$(echo "$NFIN_CONFIG" | jq '.notification | length')
+  local types=$(echo "$NFIN_CONFIG_TYPE" | jq -r '.notification.arrayValue | keys')
+  for (( i=0; i < $length; i++ )); do
+    for value in "${types[@]}"; do
+      verify_type "$i" "$value" ||  return 1
+    done
+  done
+
+  # types verified, save new hash
+  echo "$n_sum" > "$NFIN_ETC_DIR/.config_hash"
+
+  return 0
 }
 
 function get_setting {
-  echo $( echo "$NFIN_CONFIG" | jq ".settings.$1" )
+  if [ -z "$NFIN_CONFIG" ]; then
+    load_settings
+  fi
+  
+  echo $( echo "$NFIN_CONFIG" | jq -r ".$1" )
 }
 
 function set_setting {
-  NFIN_CONFIG="$( echo "$NFIN_CONFIG" | jq ".settings.$1=$2" )"
+  if [ -z "$NFIN_CONFIG" ]; then
+    load_settings
+  fi
+
+  NFIN_CONFIG="$( echo "$NFIN_CONFIG" | jq ".$1=$2" )"
 }
 
-function export_settings {
-  paths_wq=$( echo "$NFIN_CONFIG" | jq '.settings | paths(scalars) as $p | $p + [getpath($p)] | [.[:-1], .[-1]] as $q | [$q[0] | join("_") | ["NFIN_SETTINGS_", .] | add | ascii_upcase, $q[1]] | join("=")' )
-  paths=($(echo ${paths_wq//\"/""}))
+function get_default_config {
+  if [ -z "$NFIN_CONFIG_TYPE" ]; then
+    load_settings
+  fi
 
-  for path in "${paths[@]}"; do
-    eval "export $path"
-  done
+  echo $(echo "$NFIN_CONFIG_TYPE" | jq -r ".notification.arrayValue.$1.default")
 }
 
-function get_success_or_error_setting {
-  [[ $1 -eq 0 ]] && echo "onSuccess" || echo "onError"
+# $1: exit value - 0 or >=1
+# $2: elapsed time
+function get_notification_type {
+  local exit_value on_default min_default max_default notif_type return_value
+  [ "$1" -eq 0 ] && exit_value="success" || exit_value="error"
+
+  on_default=$(get_default_config 'on')
+  min_default=$(get_default_config 'minTime')
+  max_default=$(get_default_config 'maxTime')
+  notif_default=$(get_default_config 'type')
+
+  local elapsed_time=${2:-0}
+
+  local test_string=". // [] |
+  map(
+    select(
+      ( ( .on // \"$on_default\" ) == \"all\" or .on == \"$exit_value\" ) and
+      ( $elapsed_time < 0 or ( ( .minTime // ${min_default:- -1} ) <= $elapsed_time and ( ( .maxTime // ${max_default:- -1} ) <= 0 or ( .maxTime // ${max_default:- -1} ) > $elapsed_time ) ) )
+    )
+  ) | .[0].type // \"bell\""
+
+  notif_type=$( echo $( get_setting 'notification' ) | jq -r "$test_string" )
+
+  return_value=( "${notif_type:-bell}" "$exit_value" )
+
+  echo "${return_value[@]}"
 }

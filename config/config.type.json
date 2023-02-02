@@ -1,0 +1,42 @@
+{
+  "notification": {
+    "required": false,
+    "default": [],
+    "description": "An array of notification configurations. Processing notifications stops after a configuration is met",
+    "type": "array",
+    "arrayValue": {
+      "on": {
+        "required": false,
+        "default": "all",
+        "description": "When to notify, on success, error, or all exit values. For certain ways of running nFin, the exit code is not known. These are treated as successes.",
+        "type": "string",
+        "values": ["success", "error", "all"]
+      },
+      "enabled": {
+        "required": false,
+        "default": true,
+        "description": "Whether this configuration is enabled, so you can keep a configuration without removing it from the list.",
+        "type": "boolean"
+      },
+      "minTime": {
+        "required": false,
+        "default": -1,
+        "description": "The minimum amount of time in seconds the script is required to run before being notified. Must be a positive integer. Negative numbers and 0 specify unset.",
+        "type": "integer"
+      },
+      "maxTime": {
+        "required": false,
+        "default": -1,
+        "description": "The amount of time, after which, there will be no notification. Must be a positive integer. Negative numbers and 0 specify unset.",
+        "type": "integer"
+      },
+      "type": {
+        "required": false,
+        "default": "notification",
+        "description": "The type of notification to launched.",
+        "type": "string",
+        "values": ["bell", "speak", "alert", "notification"]
+      }
+    }
+  }
+}

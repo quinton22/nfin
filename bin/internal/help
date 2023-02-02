@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+function underline {
+  printf '\033[4m%s\033[0m' "$1"
+}
+
+function bold {
+  printf '\033[1m%s\033[0m' "$1"
+}
+
+function nfin_usage {
+  printf "$(bold 'USAGE'):\n\n"
+  printf "\tnfin [[-c | --config [...]] --] [$(underline commands)]\n"
+  printf "\t$(underline commands); nfin [[-c | --config ...]\n"
+}
+
+function nfin_description {
+  printf "$(bold 'DESCRIPTION'):\n\n"
+  printf "\tnfin will notify you when when a command finishes running. It can also be"
+  printf "\n\tinstalled to run automatically on each command\nrun in the terminal."
+  printf "\n\tConfigure when it will run based on execution time, exit code, etc.\n"
+}
+
+function nfin_option_config {
+  printf "\t-c, --config\n"
+  printf "\t\tUsed to view and update the config.\n\n"
+}
+
+function nfin_options {
+  printf "$(bold 'OPTIONS'):\n\n"
+  nfin_option_config
+}
+
+function nfin_help {
+  if [ "$#" -gt 0 ]; then
+    case "$1" in
+      config) nfin_option_config ;;
+      *) printf "option $1 is not recognized\n" ;;
+    esac
+  else
+    cat << EOF
+            ________ ___                 
+           |\   ____\\\__\                
+   ________\ \  \___||__|_  _________    
+  |\   ___  \ \   __\ |\  \|\   ___  \   
+  \ \  \_|\  \ \  \_| \ \  \ \  \_|\  \  
+   \ \__\\\ \__\ \__\   \ \__\ \__\\\ \__\ 
+    \|__| \|__|\|__|    \|__|\|__| \|__|
+
+
+EOF
+    nfin_usage
+    printf "\n\n"
+    nfin_description
+    printf "\n\n"
+    nfin_options
+  fi
+}

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+function config {
+  if [ "$1" = settings ]; then
+    source "$NFIN_DIR/internal/interactive_settings"
+    interactive_settings
+    exit $?
+  fi
+
+  # TODO:
+  # list all
+  # list one
+  # list multiple matching a pattern?
+  # set permanently
+  # set for single run
+  # set one
+  # set multiple
+
+  echo "Oops I haven't implemented this yet."
+}
