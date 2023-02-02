@@ -44,58 +44,58 @@ There are multiple ways to run nFin on the command line.
 
 1. Run your command preceded by `nfin`
 
-  <pre>nfin <var>COMMAND</var></pre>
+   <pre>nfin <var>COMMAND</var></pre>
 
    <details open>
    <summary>Example</summary>
    Sleeps for 15 seconds, a notification will appear afterwards.
 
-    ```sh
-    nfin sleep 15
-    ```
+   ```sh
+   nfin sleep 15
+   ```
 
    </details>
 
 2. If you have multiple commands separated by `;`, place your commands in quotes
    <pre>nfin "<var>COMMAND_1</var>[; <var>COMMAND_2</var>[; ...]]"</pre>
 
-     <details open>
-     <summary>Example</summary>
-     Sleeps for 15 seconds, then runs `ls`, and a notification will appear afterwards.
+   <details open>
+   <summary>Example</summary>
+   Sleeps for 15 seconds, then runs `ls`, and a notification will appear afterwards.
 
    ```sh
    nfin "sleep 15; ls"
    ```
 
-     </details>
+   </details>
 
    Do the same if you have multiple commands separated by `&&` or `||`
 
    <pre>nfin "<var>COMMAND_1</var> [{&& | ||} <var>COMMAND_2</var>[{&& | ||} ...]]"</pre>
 
-    <details open>
-     <summary>Example</summary>
-     Sleeps for 15 seconds, then runs `ls`, and a notification will appear afterwards.
+   <details open>
+   <summary>Example</summary>
+   Sleeps for 15 seconds, then runs `ls`, and a notification will appear afterwards.
 
    ```sh
    nfin "sleep 15 && echo 'yay' || echo 'uh-oh'"
    ```
 
-     </details>
+   </details>
 
 3. Run your command followed by `; nfin`
 
-<pre><var>COMMANDS</var>; nfin</pre>
-<details open>
-<summary>Example</summary>
+   <pre><var>COMMANDS</var>; nfin</pre>
+   <details open>
+   <summary>Example</summary>
 
-```sh
-pwd; nfin
-```
+   ```sh
+   pwd; nfin
+   ```
 
-</details>
+   </details>
 
-By running this way, nfin will notify every time.
+   By running this way, nfin will notify every time.
 
 4. Run specific configuration [\*\*](#still-under-development)
 
