@@ -6,12 +6,18 @@ A command line tool to give notifications on finish for long running commands.
 
 Use this command line tool to receive a notification when the command finishes.
 Set up a specific notification for when a command fails vs. succeeds.
-Only receive a notification if the command took a configurable amount of time to fail or succeed.
+Choose to receive notifications if the command took more than a certain amount of time to run or less than another amount of time to run.
 
 ## Installation
 
-1. Run the following in your terminal
-   `curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash`
+Run the following in your terminal
+
+```shell
+curl -s https://raw.githubusercontent.com/quinton22/nfin/main/bin/internal/install | bash
+```
+
+This will install the latest version of nfin, as well as set up nfin to run on every command in the terminal.
+You can disable this feature in the config.
 
 ## Setup
 
@@ -28,66 +34,74 @@ There are multiple ways to use nFin:
 
 ### Automatic
 
-Currently only supported for zsh
+Currently only supported for `zsh`
 
-1. This is the default, any time a command is run in the terminal, if it takes longer than the configured amount of time, you will get a notification.
+This is the default, any time a command is run in the terminal, if it takes longer than the configured amount of time, you will get a notification.
 
 ### Command line
 
+There are multiple ways to run nFin on the command line.
+
 1. Run your command preceded by `nfin`
 
-```shell
-nfin <your command here>
-```
+  <pre>nfin <var>COMMAND</var></pre>
+
+   <details open>
+   <summary>Example</summary>
+   Sleeps for 15 seconds, a notification will appear afterwards.
+
+    ```sh
+    nfin sleep 15
+    ```
+
+   </details>
 
 2. If you have multiple commands separated by `;`, place your commands in quotes
+   <pre>nfin "<var>COMMAND_1</var>[; <var>COMMAND_2</var>[; ...]]"</pre>
 
-```shell
-nfin "<first command>; <second command>"
-```
+     <details open>
+     <summary>Example</summary>
+     Sleeps for 15 seconds, then runs `ls`, and a notification will appear afterwards.
 
-Do the same if you have multiple commands separated by `&&` or `||`
+   ```sh
+   nfin "sleep 15; ls"
+   ```
 
-```shell
-nfin "<first command> && <second command> || <third command>"
-```
+     </details>
+
+   Do the same if you have multiple commands separated by `&&` or `||`
+
+   <pre>nfin "<var>COMMAND_1</var> [{&& | ||} <var>COMMAND_2</var>[{&& | ||} ...]]"</pre>
+
+    <details open>
+     <summary>Example</summary>
+     Sleeps for 15 seconds, then runs `ls`, and a notification will appear afterwards.
+
+   ```sh
+   nfin "sleep 15 && echo 'yay' || echo 'uh-oh'"
+   ```
+
+     </details>
 
 3. Run your command followed by `; nfin`
 
-```shell
-<one or more semi-colon separated commands>; nfin
+<pre><var>COMMANDS</var>; nfin</pre>
+<details open>
+<summary>Example</summary>
+
+```sh
+pwd; nfin
 ```
 
-Running this way, does not conform to the delays set in the config and will always notify as successful.
+</details>
 
-4. Automatically run on every command by a configuration in the ~/.bashrc or ~/zshrc file [\*\*](#still-under-development)
-5. Run specific configuration [\*\*](#still-under-development)
+By running this way, nfin will notify every time.
 
-### Supported Configurations
+4. Run specific configuration [\*\*](#still-under-development)
 
-```
-{
-  "settings": {
-    "notification": {
-      "onSuccess": { // on a successful command
-        "enabled": boolean, // enabled or disabled
-        "onTimeElapsed": boolean, // if true, will run only if "time" <= elapsed time to run the code
-        "time": int, // time in seconds the code must run before notifying
-        "type": "alert" | "bell" | "notification" // default is "bell", looking to add "email" and "text"
-                                                  // "bell" uses the special character "\a"
-                                                  // "alert" Mac only, will show a dismissable alert
-                                                  // "notification" Mac only, will notify in the notification panel
-      },
-      "onError": { // on an unsuccessful command
-        "enabled": boolean,
-        "onTimeElapsed": boolean,
-        "time": int,
-        "type": "alert" | "bell" | "notification"
-      }
-    }
-  }
-}
-```
+## Configuration
+
+The configuration is type defined in [config.type.json](/config/config.type.json)
 
 <br>
 <br>
