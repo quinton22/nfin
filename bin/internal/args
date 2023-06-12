@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+
+# todo add required args with !
+
+# a supported argument should take the following form
+#   <formal_arg_name>=<arg_flags>[%? | %<number_of_expected_params> | %* | %{<min_num_params>,<max_num_params>} ]
+# will return the formal args that are present in the following form (on on each line):
+#   <formal_arg_name>=<value(s)>
+# if the arg does not have a value, but is present, it's value will be "true"
+
+# example supported args map
+# ( 'help=-h|--help' 'force=-f|--force' 'list-versions=-l|--list|--list-versions%?' 'version=-v|--version%1' )
+# example supported args string
+# "help=-h|--help:force=-f|--force:list-versions=-l|--list|--list-versions%?:version=-v|--version%1"
+
+# $1: arg
+# $@: map
+get_arg() {
+  local a=$1
+  shift 1
+  local m=( $@ )
+  local arg
+  for arg in "${m[@]}"; do
+    if echo "$a" | grep -Eq -- $(echo "^${arg#*=}" | sed 's/%.*/$/g;s/|/$|^/g'); then
+      break
+    fi
+  done
+  
+  echo "$arg"
+}
+
+# $1: argument like -h or --help
+# $@: supported args map
+get_formal_arg() {
+  local arg=$(get_arg $@)
+  echo "${arg%%=*}"
+}
+
+# $1: argument like -h or --help
+# rest: supported args map
+get_arg_params() {
+  local arg=$(get_arg $@)
+  if echo "$arg" | grep -q -- '%'; then
+    echo "%${arg#*%}"
+  else
+    echo ""
+  fi
+}
+
+get_num_arg_params() {
+  local arg_params=$(get_arg_params $@)
+  case $arg_params in 
+    %\?) echo "0 1" ;;
+    %\*) echo "0 -1" ;; # represents infinite
+    %{*}) echo $arg_params | sed 's/[{}]//g;s/ //g;s/,/ /g' ;;
+    %*) echo "${arg_params#%} ${arg_params#%}" ;;
+    "") echo "0 0";;
+    *) echo "0 0" ;;
+  esac
+}
+
+# $@: supported args map
+function to_supported_args_string {
+  echo "$@" | sed 's/ /:/g'
+}
+
+# $1: suppored args string
+function to_supported_args_map {
+  echo "$1" | sed 's/:/ /g'
+  # saved_IFS=$IFS; IFS=':'
+  # local map=( $1 )
+  # IFS=$saved_IFS
+  # echo ${map[@]}
+}
+
+# supported args to string
+# accepts array of supported arguments
+# supported arguments
+function to_supported_args {
+  local supported_args_map=( $@ )
+  local supported_args=''
+  for s_arg in "${supported_args_map[@]}"; do
+    s_arg=${s_arg#*=}
+    s_arg=${s_arg%%\%*}
+    supported_args+="|$s_arg"
+  done
+
+  supported_args=${supported_args#|}
+
+  echo $supported_args
+}
+
+function verify_arg {
+  local num_accepted_args=( $(get_num_arg_params $@) )
+  local params=( $1 )
+  params=( ${params[@]:1} )
+  local num_args=${#params[@]}
+
+  if [ $num_args -lt ${num_accepted_args[0]} ] || ([ ${num_accepted_args[1]} -ne -1 ] && [ $num_args -gt ${num_accepted_args[1]} ]); then
+
+    local error_text='Expected '
+    if [ ${num_accepted_args[0]} -eq ${num_accepted_args[1]} ]; then
+      error_text+="${num_accepted_args[0]} arg(s), "
+    elif [ ${num_accepted_args[1]} -eq -1 ]; then
+        error_text+="${num_accepted_args[0]} or more args, "
+    else
+      error_text+="between ${num_accepted_args[0]} and ${num_accepted_args[1]} args, "
+    fi
+
+    error_text+="but received $num_args arg(s)."
+
+    echo "Error in the number of arguments for arg '$1'. $error_text" >&2
+    return 1
+  fi
+  return 0
+}
+
+function get_num_args_greedy {
+  local num_accepted_args=( $(get_num_arg_params $@) )
+  local params=( $1 )
+  params=( ${params[@]:1} )
+  local num_args=${#params[@]}
+
+  if [ $num_args -lt ${num_accepted_args[0]} ]; then
+    return 1
+  fi
+
+  echo ${num_accepted_args[1]}
+  return 0
+}
+
+# $1: arg string
+function replace_with_formal_arg {
+  local arg_array=( $1 )
+  shift 1
+  local arg=${arg_array[0]}
+  local params=${arg_array[@]:1}
+
+  local formal_arg=$(get_formal_arg "$arg" $@)
+  
+  if [ -z "$params" ]; then
+    params=true
+  fi
+
+  echo "$formal_arg=$params"
+}
+
+
+# $1: string of supported arguments
+# $@: arguments
+function parse_args {
+  local supported_args_map=( $(to_supported_args_map $1) )
+  
+  if [[ ! "${supported_args_map[@]}" =~ '=--%' ]] && [[ ! "${supported_args_map[@]} " =~ '=-- ' ]]; then
+    supported_args_map+=( 'command=--%*' )
+  fi
+
+  local supported_args=$(to_supported_args ${supported_args_map[@]})
+  shift 1
+  local args=$@
+
+  args=$(echo "$args" | sed -E "s/($supported_args)/\n\1/g;s/\n//")
+
+  local index=0
+  local last=$(wc -l <<< "$args" | xargs)
+
+  while read -r arg; do
+    (( index++ ))
+    local error=false
+    local error_message=$( verify_arg "$arg" ${supported_args_map[@]} 2>&1 )
+    [ -n "$error_message" ] && error=true
+    local last_arg=
+
+    if $error && [ $index -eq $last ];  then
+      # take as many args as possible & put the rest in 'command'
+      local num_args=$( get_num_args_greedy "$arg" ${supported_args_map[@]} ) && error=false || error=true
+
+      if ! $error; then
+        local arg_array=( $arg )
+        arg=${arg_array[@]:0:(( $num_args + 1 ))}
+        arg=${arg[@]}
+
+        last_arg=${arg_array[@]:(( $num_args + 1 ))}
+      fi
+    fi
+      
+    if $error; then
+      echo $error_message
+      continue
+    fi
+
+    replace_with_formal_arg "$arg" ${supported_args_map[@]}
+
+    if [ -n "$last_arg" ]; then
+      echo "command=$last_arg"
+    fi
+  done <<< "$args"
+}
