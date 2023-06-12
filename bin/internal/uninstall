@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+# precmd_functions=(${precmd_functions:#nfin_precmd})
+# preexec_functions=(${preexec_functions:#nfin_preexec})
+
+
+if [ -s $NFIN_HOME/etc/init_fns ]; then
+  init_fns=($(cat $NFIN_HOME/etc/init_fns))
+  for fn in ${init_fns[@]}; do
+    grep -v 'NFIN_HOME' "$fn" > "$fn.temp"
+    mv "$fn.temp" "$fn"
+  done
+fi
+
+rm -rf "$NFIN_HOME" 2> /dev/null
+exec "$SHELL"
+
+
