@@ -6,6 +6,6 @@ local shell_name=$(echo "$SHELL" | grep -oE '[^/]+$')
 if [[ $shell_name == zsh ]]; then
   source "$NFIN_DIR/internal/init-zsh"
 else
-  source "$NFIN_DIR/internal/init-sh"
+  source "$NFIN_DIR/internal/init-bash"
 fi
 

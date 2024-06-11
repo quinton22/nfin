@@ -17,7 +17,7 @@ function nfin_usage {
 function nfin_description {
   printf "$(bold 'DESCRIPTION'):\n\n"
   printf "\tnfin will notify you when when a command finishes running. It can also be"
-  printf "\n\tinstalled to run automatically on each command\nrun in the terminal."
+  printf "\n\tinstalled to run automatically on each command run in the terminal."
   printf "\n\tConfigure when it will run based on execution time, exit code, etc.\n"
 }
 

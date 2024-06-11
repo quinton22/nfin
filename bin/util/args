@@ -3,25 +3,26 @@
 # todo add required args with !
 
 # a supported argument should take the following form
-#   <formal_arg_name>=<arg_flags>[%? | %<number_of_expected_params> | %* | %{<min_num_params>,<max_num_params>} ]
+#   <formal_arg_name>=<arg_flags>[#? | #<number_of_expected_params> | #* | #{<min_num_params>,<max_num_params>} ]
 # will return the formal args that are present in the following form (on on each line):
 #   <formal_arg_name>=<value(s)>
 # if the arg does not have a value, but is present, it's value will be "true"
 
 # example supported args map
-# ( 'help=-h|--help' 'force=-f|--force' 'list-versions=-l|--list|--list-versions%?' 'version=-v|--version%1' )
+# ( 'help=-h|--help' 'force=-f|--force' 'list-versions=-l|--list|--list-versions#?' 'version=-v|--version#1' )
 # example supported args string
-# "help=-h|--help:force=-f|--force:list-versions=-l|--list|--list-versions%?:version=-v|--version%1"
+# "help=-h|--help&force=-f|--force&list-versions=-l|--list|--list-versions#?&version=-v|--version#1"
+
 
 # $1: arg
 # $@: map
-get_arg() {
+function get_arg {
   local a=$1
   shift 1
   local m=( $@ )
   local arg
   for arg in "${m[@]}"; do
-    if echo "$a" | grep -Eq -- $(echo "^${arg#*=}" | sed 's/%.*/$/g;s/|/$|^/g'); then
+    if echo "$a" | grep -Eq -- $(echo "^${arg#*=}" | sed 's/#.*/$/g;s/|/$|^/g'); then
       break
     fi
   done
@@ -31,46 +32,34 @@ get_arg() {
 
 # $1: argument like -h or --help
 # $@: supported args map
-get_formal_arg() {
+function get_formal_arg {
   local arg=$(get_arg $@)
   echo "${arg%%=*}"
 }
 
 # $1: argument like -h or --help
 # rest: supported args map
-get_arg_params() {
+function get_arg_params {
   local arg=$(get_arg $@)
-  if echo "$arg" | grep -q -- '%'; then
-    echo "%${arg#*%}"
+  if echo "$arg" | grep -q -- '#'; then
+    echo "#${arg#*\#}"
   else
     echo ""
   fi
 }
 
-get_num_arg_params() {
+# $1: argument like -h or --help
+# rest: supported args map
+function get_num_arg_params {
   local arg_params=$(get_arg_params $@)
   case $arg_params in 
-    %\?) echo "0 1" ;;
-    %\*) echo "0 -1" ;; # represents infinite
-    %{*}) echo $arg_params | sed 's/[{}]//g;s/ //g;s/,/ /g' ;;
-    %*) echo "${arg_params#%} ${arg_params#%}" ;;
+    \#\?) echo "0 1" ;;
+    \#\*) echo "0 -1" ;; # represents infinite
+    \#{*}) echo ${arg_params#\#} | sed 's/[{}]//g;s/ //g;s/,/ /g' ;;
+    \#*) echo "${arg_params#\#} ${arg_params#\#}" ;;
     "") echo "0 0";;
     *) echo "0 0" ;;
   esac
-}
-
-# $@: supported args map
-function to_supported_args_string {
-  echo "$@" | sed 's/ /:/g'
-}
-
-# $1: suppored args string
-function to_supported_args_map {
-  echo "$1" | sed 's/:/ /g'
-  # saved_IFS=$IFS; IFS=':'
-  # local map=( $1 )
-  # IFS=$saved_IFS
-  # echo ${map[@]}
 }
 
 # supported args to string
@@ -81,7 +70,7 @@ function to_supported_args {
   local supported_args=''
   for s_arg in "${supported_args_map[@]}"; do
     s_arg=${s_arg#*=}
-    s_arg=${s_arg%%\%*}
+    s_arg=${s_arg%%\#*}
     supported_args+="|$s_arg"
   done
 
@@ -137,22 +126,24 @@ function replace_with_formal_arg {
   local params=${arg_array[@]:1}
 
   local formal_arg=$(get_formal_arg "$arg" $@)
-  
-  if [ -z "$params" ]; then
-    params=true
-  fi
 
   echo "$formal_arg=$params"
+  
+  # if [ -z "$params" ]; then
+  #   params=true    
+  # fi
+  # echo "$formal_arg=$params"
 }
 
 
 # $1: string of supported arguments
 # $@: arguments
 function parse_args {
-  local supported_args_map=( $(to_supported_args_map $1) )
+  local command_arg='command'
+  local supported_args_map=( $1 )
   
-  if [[ ! "${supported_args_map[@]}" =~ '=--%' ]] && [[ ! "${supported_args_map[@]} " =~ '=-- ' ]]; then
-    supported_args_map+=( 'command=--%*' )
+  if [[ ! "${supported_args_map[@]}" =~ '=--#' ]] && [[ ! "${supported_args_map[@]} " =~ '=-- ' ]]; then
+    supported_args_map+=( "$command_arg=--#*" )
   fi
 
   local supported_args=$(to_supported_args ${supported_args_map[@]})
@@ -163,6 +154,8 @@ function parse_args {
 
   local index=0
   local last=$(wc -l <<< "$args" | xargs)
+
+  local ret=0
 
   while read -r arg; do
     (( index++ ))
@@ -186,13 +179,20 @@ function parse_args {
       
     if $error; then
       echo $error_message
+      ret=1
       continue
     fi
 
     replace_with_formal_arg "$arg" ${supported_args_map[@]}
 
     if [ -n "$last_arg" ]; then
-      echo "command=$last_arg"
+      echo "$command_arg=$last_arg"
     fi
   done <<< "$args"
+
+  return $ret
+}
+
+function to_usage {
+  :
 }

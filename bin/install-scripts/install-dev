@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+
+# folder structure
+# ~/.nfin
+# |-- lib
+#   |-- current --> <version>
+#   |-- <version>
+#     |-- bin
+# |-- etc
+#   |-- config.json
+#   |-- config.type.json
+#   |-- init_fns
+# |-- tmp
+
+NFIN_HOME="$HOME/.nfin"
+NFIN_LIB_DIR="$NFIN_HOME/lib"
+NFIN_CURRENT="$NFIN_LIB_DIR/current"
+NFIN_DIR="$NFIN_CURRENT/bin"
+NFIN_ETC_DIR="$NFIN_HOME/etc"
+NFIN_SETTINGS_FILE="$NFIN_ETC_DIR/config.json"
+NFIN_TMP_DIR="$NFIN_HOME/tmp"
+
+set_color() {
+  local brightness=""
+  local color="0"
+  if [ $# -eq 2 ]; then
+    brightness="$1;"
+    color=$2
+  elif [ $# -eq 1 ]; then
+    brightness="0;"
+    color=$1
+  fi
+
+  printf '\033[%sm' "$brightness$color"
+}
+
+download() {
+  if command -v curl > /dev/null; then
+    curl -fsSL "$1" > "$2"
+  else
+    wget -qO- "$1" > "$2"
+  fi
+}
+
+# params:
+# $1: version
+create_file_structure() {
+  # clear $NFIN_CURRENT
+  rm -rf "$NFIN_CURRENT" 2> /dev/null
+
+  # create file structure (if not already)
+  # creates /lib, /etc, /lib/current/..., and /lib/$1/...
+  cd $NFIN_HOME &> /dev/null
+  cat $NFIN_TMP_DIR/*/config/dir_struct | sed '/current/{p;s/current/'$1'/g;};/^$/d' | xargs mkdir -p 2> /dev/null
+
+  cd - &> /dev/null
+  
+  # if lib/current/ has files, then move those to the version
+  # if [ -s "$NFIN_CURRENT/var/version" ]; then
+  #   mv -f $NFIN_CURRENT/* $NFIN_LIB_DIR/$(cat "$NFIN_CURRENT/var/version")/ 2> /dev/null
+  # fi
+
+  # copy to lib/current/bin & etc
+  ls -1d $NFIN_TMP_DIR/*/bin | xargs -J % cp -R % "$NFIN_CURRENT" 2> /dev/null
+  ls -1 $NFIN_TMP_DIR/*/config/* | xargs -J % cp % "$NFIN_ETC_DIR" 2> /dev/null
+
+  cp -R $NFIN_CURRENT/* $NFIN_LIB_DIR/$1
+
+  echo "$1" > "$NFIN_CURRENT/var/version"
+}
+
+resolve_config() {
+  if [ -s "$NFIN_SETTINGS_FILE" ] && [ -z "$(cat $NFIN_SETTINGS_FILE)" ]; then
+    # merge config & remove template
+    jq -s '.[0] * .[1]' "$NFIN_ETC_DIR/config.template.json" "$NFIN_SETTINGS_FILE" > "$NFIN_SETTINGS_FILE"
+    rm "$NFIN_ETC_DIR/config.template.json"
+  else
+    mv "$NFIN_ETC_DIR/config.template.json" "$NFIN_SETTINGS_FILE"
+  fi
+}
+
+add_to_rc_file() {
+  if [ -s "$1" ]; then
+    local init_fns=$NFIN_ETC_DIR/init_fns
+    ( [ -s $init_fns ] && cat $init_fns | grep -q "$1" ) || echo "$1" >> $init_fns
+
+    if ! (grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' "$1" && grep -q "^[ ]*\[ -s \"\$NFIN_HOME/bin/install/$2\" \] && source \"\$NFIN_HOME/bin/install/$2\"" "$1"); then
+      cat << EOF >> "$1"
+
+export NFIN_HOME="\$HOME/.nfin"
+[ -s "\$NFIN_HOME/bin/install/$2" ] && source "\$NFIN_HOME/bin/install/$2"
+EOF
+
+      printf "Adding code to $(set_color 34)$1$(set_color)\n"
+    fi
+  else
+    return 1
+  fi
+}
+
+check_download() {
+  if [ ! -f "$NFIN_TMP_DIR/nfin.zip" ]; then
+    printf "$(set_color 31)Failed to download.$(set_color) Please try again.\n"
+    # rm -rf "$NFIN_HOME"
+    exit 1;
+  fi
+}
+
+install_dev() {
+  # assumed that install dev is being run from the dev location
+
+  mkdir -p "$NFIN_TMP_DIR" 2> /dev/null
+
+  source="remote"
+
+  case $1 in
+    -s|--source)
+      source="$2"
+      shift
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+
+  case $source in
+    remote)
+      printf "Downloading from $(set_color 34)github$(set_color)\n"
+      download 'https://github.com/quinton22/nfin/archive/refs/heads/main.zip' "$NFIN_TMP_DIR/nfin.zip"
+      check_download
+      unzip -qo "$NFIN_TMP_DIR/nfin.zip" -d "$NFIN_TMP_DIR"
+      rm -rf "$NFIN_TMP_DIR/nfin.zip"
+      ;;
+    local)
+      printf "Downloading from $(set_color 34)local$(set_color)\n"
+      current_dir=$(cd $(dirname "$0") && pwd)
+      mkdir -p "$NFIN_TMP_DIR/nfin/bin"
+      mkdir -p "$NFIN_TMP_DIR/nfin/config"
+      cp -R $current_dir/../../bin $NFIN_TMP_DIR/nfin
+      cp -R $current_dir/../../config $NFIN_TMP_DIR/nfin
+      ;;
+    *)
+      printf "$(set_color 31)Download destination invalid: $source.$(set_color) Please try again.\n"
+      exit 1
+      ;;
+  esac
+
+  create_file_structure 'dev'
+
+  rm -rf "$NFIN_TMP_DIR"
+
+  resolve_config
+
+
+  # add to rc file
+  if [ -f "$HOME/.zshrc" ]; then
+    add_to_rc_file "$HOME/.zshrc" "init-zsh"
+  elif [ -f "$HOME/.zprofile" ]; then
+    add_to_rc_file "$HOME/.zprofile" "init-zsh"
+  fi
+
+  if [ -f "$HOME/.bashrc" ]; then
+    add_to_rc_file "$HOME/.bashrc" "init-bash"
+  elif [ -f "$HOME/.bash_profile" ]; then
+    add_to_rc_file "$HOME/.bash_profile" "init-bash"
+  fi
+
+  if [ -f "$HOME/.profile" ]; then
+    add_to_rc_file "$HOME/.profile" "init"
+  fi
+
+  local sources=$(cat $NFIN_ETC_DIR/init_fns)
+
+  printf "\n$(set_color 32)Successfully installed!$(set_color)\n"
+  printf "\nRun the following to use in current session or restart the terminal:\n"
+  printf "$(set_color 35)$(echo "$sources" | sed 's/^/source /g')$(set_color)\n"
+}
+
+install_dev "$@"

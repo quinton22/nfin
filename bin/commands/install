@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Precondition:
+# - This file is expected to be run as part of the cli
+# - OR with the proper file structure
+
 # Install
 # - Read in arguments
 # - If list version arg, then get all versions and list
@@ -11,59 +15,34 @@
 # - Download version into ~/.nfin/lib/<version>/ & point current to that version
 
 
-NFIN_INSTALL_URI='https://raw.githubusercontent.com/quinton22/nfin/main/bin/install/install'
+# NFIN_INSTALL_URI='https://raw.githubusercontent.com/quinton22/nfin/main/bin/install/install'
 
 NFIN_HOME="$HOME/.nfin"
-NFIN_LIB_DIR="$NFIN_HOME/lib"
-NFIN_CURRENT="$NFIN_LIB_DIR/current"
+NFIN_LIB="$NFIN_HOME/lib"
+NFIN_CURRENT="$NFIN_LIB/current"
 NFIN_DIR="$NFIN_CURRENT/bin"
-NFIN_ETC_DIR="$NFIN_HOME/etc"
-NFIN_SETTINGS_FILE="$NFIN_ETC_DIR/config.json"
-NFIN_TMP_DIR="$NFIN_HOME/tmp"
+NFIN_ETC="$NFIN_HOME/etc"
+NFIN_SETTINGS_FILE="$NFIN_ETC/config.json"
+NFIN_TMP="$NFIN_HOME/tmp"
 
-version_reg='^((v?[0-9]+(\.[0-9]+){0,2})|latest)(-[a-z]+)?$'
+NFIN_SUPPORTED_VERSION='^((v?[0-9]+(\.[0-9]+){0,2})|latest)(-[a-z]+)?$'
 
-# colors
-# Black        0;30     Dark Gray     1;30
-# Red          0;31     Light Red     1;31
-# Green        0;32     Light Green   1;32
-# Brown/Orange 0;33     Yellow        1;33
-# Blue         0;34     Light Blue    1;34
-# Purple       0;35     Light Purple  1;35
-# Cyan         0;36     Light Cyan    1;36
-# Light Gray   0;37     White         1;37
 
-# code 35
-# path 34
-# fail 31
-# success 32
-set_color() {
-  local brightness=""
-  local color="0"
-  if [ $# -eq 2 ]; then
-    brightness="$1;"
-    color=$2
-  elif [ $# -eq 1 ]; then
-    brightness="0;"
-    color=$1
-  fi
-
-  printf '\033[%sm' "$brightness$color"
+source_files() {
+  local util_dir=$(dirname $0)/../util
+  source $util_dir/*
 }
 
-print_command() {
-  printf "$(set_color 35)$1$(set_color)"
-}
 
 print_main_help() {
   printf "\nInstall nFin\n\n"
   printf "Usage:\n"
-  printf "\n\t$(print_command 'curl -s '$NFIN_INSTALL_URI' | bash -s -- [options]')\n\n"
+  printf "\n\t$(print_command 'nfin install [options]')\n\n"
   printf "Options:\n"
   printf "\n\t$(print_command '-h, --help')\n\t\t\tSee help\n"
   printf "\n\t$(print_command '-f, --force')\n\t\t\tForce install, overwriting current install and settings\n"
   printf "\n\t$(print_command '-v, --version \033[4mversion\033[0m')\n\t\t\tany acceptable version number matching the regex "
-  printf "$(set_color 35)$version_reg$(set_color) (ex. 1, 1.0, 1.0.0, v1.0, v1.0-beta, v1-any, latest, or latest-alpha)\n"
+  printf "$(print_command $NFIN_SUPPORTED_VERSION) (ex. 1, 1.0, 1.0.0, v1.0, v1.0-beta, v1-any, latest, or latest-alpha)\n"
   printf "\n\t$(print_command '-l, --list, --list-versions')\n\t\t\tList versions\n"
 }
 
@@ -132,17 +111,17 @@ process_arg() {
     force) force_arg=true ;;
     list-versions)
       list_versions_arg=true
-      if echo "$@" | grep -qE "$version_reg"; then
+      if echo "$@" | grep -qE "$NFIN_SUPPORTED_VERSION"; then
         version_arg="$arg"
       fi
     ;;
     version)
-      if echo "$@" | grep -qE "$version_reg"; then
+      if echo "$@" | grep -qE "$NFIN_SUPPORTED_VERSION"; then
         is_version_arg_set=true
         version_arg="$arg"
       else
         printf "Oops, the version should satisfy the following regex:\n\n"
-        printf "$(set_color 35)$version_reg$(set_color) (ex. 1, 1.0, 1.0.0, v1.0, v1.0-beta, v1-any, latest, or latest-alpha)\n\n"
+        printf "$(set_color 35)$NFIN_SUPPORTED_VERSION$(set_color) (ex. 1, 1.0, 1.0.0, v1.0, v1.0-beta, v1-any, latest, or latest-alpha)\n\n"
       fi
     ;;
     *) 
@@ -198,7 +177,12 @@ parse_args() {
 }
 
 get_version_json() {
-  curl -fsSL 'https://api.github.com/repos/quinton22/nfin/releases'
+  local url='https://api.github.com/repos/quinton22/nfin/releases'
+  if command -v curl > /dev/null; then
+    curl -fsSLk -H 'Content-Type: application/json' $url
+  else
+    wget -qO- --no-check-certificate $url # TODO: test
+  fi
 }
 
 list_versions() {
@@ -328,9 +312,49 @@ download() {
   fi
 }
 
+# params:
+# $1: version
+create_file_structure() {
+  # clear $NFIN_CURRENT
+  rm -rf "$NFIN_CURRENT" 2> /dev/null
+
+  # create file structure (if not already)
+  # creates /lib, /etc, /lib/current/..., and /lib/$1/...
+  cd $NFIN_HOME &> /dev/null
+  cat $NFIN_TMP/*/config/dir_struct | sed '/current/{p;s/current/'$1'/g;};/^$/d' | xargs mkdir -p 2> /dev/null
+
+  cd - &> /dev/null
+  
+  # if lib/current/ has files, then move those to the version
+  # if [ -s "$NFIN_CURRENT/var/version" ]; then
+  #   mv -f $NFIN_CURRENT/* $NFIN_LIB/$(cat "$NFIN_CURRENT/var/version")/ 2> /dev/null
+  # fi
+
+  # copy to lib/current/bin & etc
+  ls -1d "$NFIN_TMP/*/bin" | xargs -J % cp -R % "$NFIN_CURRENT" 2> /dev/null
+  ls -1 "$NFIN_TMP/*/config/*" | xargs -J % cp % "$NFIN_ETC" 2> /dev/null
+
+  cp -R $NFIN_CURRENT/* $NFIN_LIB/$1
+
+  echo "$1" > "$NFIN_CURRENT/var/version"
+}
+
+resolve_config() {
+  if [ -s "$NFIN_SETTINGS_FILE" ]; then
+    # merge config & remove template
+    jq -s '.[0] * .[1]' "$NFIN_ETC/config.template.json" "$NFIN_SETTINGS_FILE" > "$NFIN_SETTINGS_FILE"
+    rm "$NFIN_ETC/config.template.json"
+  else
+    mv "$NFIN_ETC/config.template.json" "$NFIN_SETTINGS_FILE"
+  fi
+}
+
 add_to_rc_file() {
   if [ -s "$1" ]; then
-    if ! (grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' "$1" && grep -q "^[ ]*\[ -s \"\$NFIN_HOME/bin/install/$2\" \] && source \"\$NFIN_HOME/bin/internal/$2\"" "$1"); then
+    local init_fns=$NFIN_HOME/etc/init_fns
+    ( [ -s $init_fns ] && cat $init_fns | grep -q "$1" ) || echo "$1" >> $init_fns
+    
+    if ! (grep -q '^[ ]*export NFIN_HOME="$HOME/.nfin"' "$1" && grep -q "^[ ]*\[ -s \"\$NFIN_HOME/bin/install/$2\" \] && source \"\$NFIN_HOME/bin/install/$2\"" "$1"); then
       cat << EOF >> "$1"
 
 export NFIN_HOME="\$HOME/.nfin"
@@ -344,7 +368,10 @@ EOF
   fi
 }
 
+
 install() {
+  # parse arguments
+  # =================================
   parse_args "$@"
 
   if $help_arg; then
@@ -369,10 +396,13 @@ install() {
       printf "You can also force install a specific version with the following command:"
       printf "\n\n$(print_command 'curl -s '$NFIN_INSTALL_URI' | bash -s -- --force --version <version>')\n\n"
       printf "Where $(set_color 35)<version>$(set_color) is any acceptable version number matching the regex\n"
-      printf "$(set_color 35)$version_reg$(set_color) (ex. 1, 1.0, 1.0.0, v1.0, v1.0-beta, v1-any, latest, or latest-alpha)\n"
+      printf "$(set_color 35)$NFIN_SUPPORTED_VERSION$(set_color) (ex. 1, 1.0, 1.0.0, v1.0, v1.0-beta, v1-any, latest, or latest-alpha)\n"
       exit 1
     fi
   fi
+
+  # check for installed packages
+  # =================================
 
   if ! command -v jq > /dev/null; then
     printf "Please install jq. On mac:\n$(set_color 35)brew install jq$(set_color)\n"
@@ -393,49 +423,38 @@ install() {
   # get version url
   get_matching_version_url "$version_arg" "$file_type"
 
-
   # todo check if $matching_version is already installed
-  if [ -d "$NFIN_LIB_DIR/$matching_version" ]; then
+  if [ -d "$NFIN_LIB/$matching_version" ]; then
     :
   fi
 
-  mkdir -p "$NFIN_TMP_DIR" 2> /dev/null
+  # download
+  # =================================
 
-  local download_location="$NFIN_TMP_DIR/nfin_$matching_version.$file_type"
+  mkdir -p "$NFIN_TMP" 2> /dev/null
+
+  local download_location="$NFIN_TMP/nfin_$matching_version.$file_type"
 
   download "$version_url" "$download_location"
 
   if [ ! -f "$download_location" ]; then
     printf "$(set_color 31)Failed to download.$(set_color) Please try again.\n"
-    rm -rf "$NFIN_HOME"
-    exit 1;
+    # rm -rf "$NFIN_HOME"
+    exit 1
   fi
 
   if [ $file_type = zip ]; then
-    unzip -qo "$download_location" -d "$NFIN_TMP_DIR"
+    unzip -qo "$download_location" -d "$NFIN_TMP"
   else
-    tar -f "$download_location" "$NFIN_TMP_DIR"
+    tar -f "$download_location" "$NFIN_TMP"
   fi
   rm -rf "$download_location"
 
-  # create file structure (if not already)
-  ls -1 "$NFIN_TMP_DIR/*/config/dir_struct" | xargs sed '/current/{p;s/current/'$matching_version'/g;};/^$/d' | xargs mkdir -p 2> /dev/null
+  create_file_structure "$matching_version"
 
-  mkdir -p "$NFIN_LIB_DIR/$matching_version" 2> /dev/null
+  rm -rf "$NFIN_TMP"/*
   
-  # if lib/current/ has files, then move those to the version
-  if [ -s "$NFIN_CURRENT/var/version" ]; then
-    mv -f $NFIN_CURRENT/* $NFIN_LIB_DIR/$(cat "$NFIN_CURRENT/var/version")/ 2> /dev/null
-  fi
-
-  # copy to lib/current/bin & etc
-  ls -1d "$NFIN_TMP_DIR/*/bin" | xargs -J % cp -R % "$NFIN_CURRENT" 2> /dev/null
-  ls -1 "$NFIN_TMP_DIR/*/config/*" | xargs -J % cp % "$NFIN_ETC_DIR" 2> /dev/null
-
-  rm -rf "$NFIN_TMP_DIR"/*
-  # this overwrites the current config, which we might not want to do?
-  # todo: make a config resolution strategy
-  mv "$NFIN_ETC_DIR/config.template.json" "$NFIN_SETTINGS_FILE"
+  resolve_config
 
   local initzsh initbash initsh
 
@@ -445,11 +464,10 @@ install() {
   ( add_to_rc_file "$HOME/.bash_profile" "init" || add_to_rc_file "$HOME/.bash_login" "init" || add_to_rc_file "$HOME/.profile" "init" ) \
   && initsh=0 || initsh=1
 
-  echo "$initzsh $initbash $initsh"
-
+  # if everything fails, create a .bash_profile
   if [ "$initzsh" -eq 1 ] && [ "$initbash" -eq 1 ] && [ "$initsh" -eq 1 ]; then
       touch "$HOME/.bash_profile"
-      initsh=$(add_to_rc_file "$HOME/.bash_profile" "init")
+      add_to_rc_file "$HOME/.bash_profile" "init" && initsh=0 || initsh=1
   fi
 
   if [ ! "$initzsh" -eq 1 ] || [ ! "$initbash" -eq 1 ] || [ ! "$initsh" -eq 1 ]; then

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 source "$NFIN_DIR/internal/common"
+# source "$(dirname $0)/common"
 
 function load {
   NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE 2>/dev/null )
@@ -10,13 +11,9 @@ function load {
 # $1: index
 # $2: value
 function verify_type {
-  if [ -z "$NFIN_CONFIG" ]; then
-    load
-  fi
-
   local config type
-  config=$(echo "$NFIN_CONFIG" | jq ".notification.[$1]")
-  type=$(echo "$NFIN_CONFIG_TYPE" | jq ".notification.arrayValue")
+  config=$(jq ".notification.[$1]" "$NFIN_SETTINGS_FILE")
+  type=$(jq ".notification.arrayValue" "$NFIN_SETTINGS_TYPE")
 
   local value value_type constraint_type required allowed 
   value=$(echo "$config" | jq -r ".$2") 
@@ -50,9 +47,67 @@ function verify_type {
   return 0
 }
 
-function load_settings {
-  load
+function verify_type_recursive {
+  local config_key=$1
+  local config_type=$2
+  [ $config_key == '.' ] && local extending_key='' || local extending_key=$config_key
 
+  local config="$(cat $NFIN_SETTINGS_FILE 2>/dev/null | jq -r "$config_key")"
+
+  printf "testing:\n$config_key\n$config_type\n\n"
+
+  if [ "$config" == 'null' ]; then
+    if $(echo "$config_type" | jq -r '.required // false'); then
+      return 1
+    fi
+    return 0
+  fi
+
+  # if type == 'array' || type == 'object' recurse on ${type}Type
+  local type=$(echo "$config_type" | jq -r '.type')
+  if [ $type == 'object' ]; then
+    local entries_types=$(echo "$config_type" | jq -r '.objectType | to_entries')
+    local entries_length=$(echo "$entries_types" | jq -r 'length')
+    local i=0
+    for (( i=0; i<$entries_length; i++ )); do
+      local key=$(echo "$entries_types" | jq -r ".[$i].key")
+      local value=$(echo "$entries_types" | jq -r ".[$i].value")
+      verify_type_recursive "$extending_key.$key" "$value" || return 1
+    done
+    return 0
+  fi
+  if [ $type == 'array' ]; then
+    local array_type=$(echo "$config_type" | jq -r '.arrayType.type')
+    local array_length=$(echo "$config" | jq -r 'length' )
+    # verify all items in jq '.[]' that the type matches array_type
+    local i=0
+    for (( i=0 ; i<$array_length ; i++ )); do
+      verify_type_recursive "$extending_key[$i]" "$(echo "$config_type" | jq -r '.arrayType')" ||  return 1
+    done
+    return 0
+  fi
+  if [ $type == 'string' ] && [ $(echo "$config_type" | jq -r 'if .values == null then "null" else "good" end') == 'good' ]; then
+    allowed=( $(echo "$config_type" | jq -r ".values | .[] ") )
+    if ! [[ " ${allowed[@]} " =~ " $config " ]]; then
+      printf "Uh oh... typecheck failed on config file.\n\n" >&2
+      printf "The notification setting '%s'\n" "$config_key" >&2
+      printf "should be one of the following values:" >&2
+      IFS='\n' printf " %s," "${allowed[@]}" >&2
+      printf "\nbut instead it is: $config"
+
+      return 1
+    fi
+  fi
+
+  [ $type == $(cat $NFIN_SETTINGS_FILE 2>/dev/null | jq -r "$config_key | type") ] && return 0 || { echo "fail"; return 1; }
+}
+
+function verify_all_types {
+  verify_type_recursive '.' "$(cat $NFIN_SETTINGS_TYPE 2>/dev/null)" || return 1
+  return 0
+}
+
+function load_settings {
   local o_sum n_sum 
 
   if [ -s "$NFIN_ETC_DIR/.config_hash" ]; then
@@ -72,13 +127,7 @@ function load_settings {
 
   # settings file is dirty, so verify the types
 
-  local length=$(echo "$NFIN_CONFIG" | jq '.notification | length')
-  local types=$(echo "$NFIN_CONFIG_TYPE" | jq -r '.notification.arrayValue | keys')
-  for (( i=0; i < $length; i++ )); do
-    for value in "${types[@]}"; do
-      verify_type "$i" "$value" ||  return 1
-    done
-  done
+  verify_all_types || return 1
 
   # types verified, save new hash
   echo "$n_sum" > "$NFIN_ETC_DIR/.config_hash"
@@ -87,27 +136,15 @@ function load_settings {
 }
 
 function get_setting {
-  if [ -z "$NFIN_CONFIG" ]; then
-    load_settings
-  fi
-  
-  echo $( echo "$NFIN_CONFIG" | jq -r ".$1" )
+  jq -r ".$1" "$NFIN_SETTINGS_FILE"
 }
 
 function set_setting {
-  if [ -z "$NFIN_CONFIG" ]; then
-    load_settings
-  fi
-
-  NFIN_CONFIG="$( echo "$NFIN_CONFIG" | jq ".$1=$2" )"
+  jq ".$1=$2" "$NFIN_SETTINGS_FILE" > "$NFIN_SETTINGS_FILE"
 }
 
 function get_default_config {
-  if [ -z "$NFIN_CONFIG_TYPE" ]; then
-    load_settings
-  fi
-
-  echo $(echo "$NFIN_CONFIG_TYPE" | jq -r ".notification.arrayValue.$1.default")
+  jq -r ".notification.arrayValue.$1.default" "$NFIN_SETTINGS_TYPE"
 }
 
 # $1: exit value - 0 or >=1

@@ -1,8 +1,7 @@
-~/.nfin
-~/.nfin/lib
-~/.nfin/etc
-~/.nfin/lib/current/bin
-~/.nfin/lib/current/etc
-~/.nfin/lib/current/tmp
-~/.nfin/lib/current/var
+lib
+etc
+lib/current/bin
+lib/current/etc
+lib/current/tmp
+lib/current/var
 
