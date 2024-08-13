@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+
+# Description
+# =================
+# Install script run via curl command
+
+# - Check if nFin is already installed
+#   - if yes, use bin/install function
+#   - if no, download to tmp folder, run bin/install
+
+: ${NFIN_HOME:="~/.nfin"}
+: ${NFIN_LIB:="$NFIN_HOME/lib"}
+: ${NFIN_TMP:="$NFIN_HOME/tmp"}
+
+check_is_installed() {
+  if [ -d $NFIN_HOME ] && [ -f $NFIN_LIB/current/bin/install/install ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+cli_install() {
+  source $NFIN_LIB/current/bin/internal/install
+  install $@
+  exit $?
+}
+
+get_version_json() {
+  local url='https://api.github.com/repos/quinton22/nfin/releases'
+  if command -v curl > /dev/null; then
+    curl -fsSLk -H 'Content-Type: application/json' $url
+  else
+    wget -qO- --no-check-certificate $url # TODO: test
+  fi
+}
+
+get_latest_version() {
+  local version
+  read -r version <<< $(get_version_json || echo '')
+  version=$(echo $version | grep -Eo '"name": ".*?"')
+  version=${version#*: \"}
+  version=${version%\"}
+  echo $version
+}
+
+download() {
+  printf "downloading...\n"
+  if command -v curl > /dev/null; then
+    curl -fsSL "$1" > "$2"
+  else
+    wget -qO- "$1" > "$2"
+  fi
+}
+
+
+install_latest() {
+  if check_is_installed; then
+    printf "Found installed version. For future uses, run 'nfin install $@'"
+    cli_install $@
+  fi
+
+  # create folders
+  if [ ! -d $NFIN_LIB ]; then
+    mkdir -p $NFIN_LIB
+  fi
+  if [ ! -d $NFIN_TMP ]; then
+    mkdir $NFIN_TMP
+  fi
+
+  # get latest version
+  local version=$(get_latest_version)
+
+  if [ -z "$version" ]; then
+    printf "Could not get download from github\n"
+    return 1
+  fi
+
+  local file_type download_url
+  if command -v unzip > /dev/null; then
+    file_type='zip'
+    download_url="https://api.github.com/repos/quinton22/nfin/zipball/$version"
+  elif command -v tar > /dev/null; then
+    file_type='tar.gz'
+    download_url="https://api.github.com/repos/quinton22/nfin/tarball/$version"
+  else
+    printf "Could not unzip. Please install either 'unzip' or 'tar'.\n"
+    exit 1
+  fi
+
+  # download
+  # =================================
+
+  mkdir -p "$NFIN_TMP" 2> /dev/null
+
+  local download_location="$NFIN_TMP/nfin_$version.$file_type"
+
+  download "$download_url" "$download_location"
+
+  if [ ! -f "$download_location" ]; then
+    printf "Failed to download. Please try again.\n"
+    exit 1
+  fi
+
+  if [ $file_type = zip ]; then
+    unzip -qo "$download_location" -d "$NFIN_TMP/$version"
+  else
+    tar -f "$download_location" "$NFIN_TMP/$version"
+  fi
+
+  cp -r $NFIN_TMP/$version/*/ $NFIN_LIB/$version
+  rm -rf $NFIN_TMP/*
+
+  # ~/.nfin/lib/current --> ~/.nfin/lib/<version>
+  ln -sF $NFIN_LIB/$version $NFIN_LIB/current
+
+
+  # finish up install
+  cli_install $@
+}
+
+install_latest $@

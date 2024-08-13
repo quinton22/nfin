@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
 function config {
+
+
+
+
   if [ "$1" = settings ]; then
     source "$NFIN_DIR/internal/interactive_settings"
     interactive_settings

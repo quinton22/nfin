@@ -6,9 +6,10 @@
 # - email
 # - text
 # - native notification
-# - install script
+# - install script ✅
 # - update script
 # - ignore certain commands (e.g. man)
+# - allow editing config
 
 # todo need?
 set -e
@@ -21,26 +22,31 @@ NFIN_CONFIG=$( cat $NFIN_SETTINGS_FILE )
 
 source "$NFIN_DIR/internal/get_setting"
 source "$NFIN_DIR/internal/common"
-
-supported_args='-c|--config|-h|--help'
-supported_args=$( echo "^$supported_args$" | sed 's/|/$|^/g' )
-local_changes_only=false
+source "$NFIN_DIR/internal/args"
 
 function process_arg {
   local formal_arg=$1
   shift 1
   local arg_opts="$@"
   case "$formal_arg" in
-    -c|--config)
+    config)
       source "$NFIN_DIR/internal/config"
-      config "$@"
-    ;;
-    -h|--help)
-      source "$NFIN_DIR/internal/help"
-      nfin_help "$@"
+      config $arg_opts
       exit 0
     ;;
-    *) 
+    help)
+      source "$NFIN_DIR/internal/help"
+      nfin_help $arg_opts
+      exit 0
+    ;;
+    command)
+      if [ -n  "$arg_opts" ]; then
+        NFIN_USER_COMMAND=$arg_opts
+        # set a temporary config
+        local_changes_only=true
+      fi
+    ;;
+    *)
       echo "Unsupported argument: $formal_arg"
       source "$NFIN_DIR/internal/help"
       nfin_usage
@@ -49,75 +55,53 @@ function process_arg {
   esac
 }
 
-function parse_args {
-  local arg
-  local args=()
-  local all_args=( "$@" )
-
-  for i in "${!all_args[@]}"; do
-    arg=${all_args[$i]}
-    if [ "$arg" = -- ]; then
-      (( i+=1 ))
-      break
-    fi
-    if [[ $arg =~ $supported_args ]]; then
-      if [ "${#args[@]}" -gt 0 ]; then
-        process_arg "${args[@]}"
-      fi
-
-      args=( "$arg" )
-    else
-      if [ ! "${#args[@]}" -eq 0 ]; then
-        args+=( "$arg" )
-      elif [ $arg = -* ]; then
-        process_arg "$arg"
-      else
-        break
-      fi
-    fi
+function process_args {
+  for arg in $@; do
+    process_arg $( sed 's/=/ /' <<< $arg )
   done
-
-  if [ "${#args[@]}" -gt 0 ]; then
-    process_arg "${args[@]}"
-  fi
-
-  NFIN_USER_COMMAND="${all_args[@]:$i}"
-
-  if [ -n  "$NFIN_USER_COMMAND" ]; then
-    local_changes_only=true
-  fi
 }
 
-source "$NFIN_DIR/internal/notify"
+function nfin {
+  local supported_args_map=( 'config=-c|--config%?' 'help=-h|--help%?' )
+  local supported_args="${supported_args_map[@]}"
+  local local_changes_only=false
+  local parsed_args=( $(parse_args "$supported_args" "$@") )
 
-if [ "$#" -eq 0 ]; then
-  notify
-  exit 0
-fi
+  source "$NFIN_DIR/internal/notify"
 
-NFIN_USER_COMMAND=
+  if [ "$#" -eq 0 ]; then
+    notify
+    exit 0
+  fi
 
-parse_args "$@"
+  NFIN_USER_COMMAND=
 
-export NFIN_USER_COMMAND
+  echo $parsed_args
 
-if [ -z "$NFIN_USER_COMMAND" ]; then
-  exit 0
-fi
+  process_args $parsed_args
 
-# trap 'notify "$start" "failure" "$?" "$LINENO"' ERR
+  export NFIN_USER_COMMAND
 
-start=$(date +%s)
+  if [ -z "$NFIN_USER_COMMAND" ]; then
+    exit 0
+  fi
 
-# what do we want to do with the error output?
-# "$@" 2>/dev/null && outcome='success' || outcome='failure'
+  # trap 'notify "$start" "failure" "$?" "$LINENO"' ERR
 
-$NFIN_USER_COMMAND
+  start=$(date +%s)
 
-return_code=$?
-end=$(date +%s)
+  # what do we want to do with the error output?
+  # "$@" 2>/dev/null && outcome='success' || outcome='failure'
 
-notify $return_code $start $end 
+  $NFIN_USER_COMMAND
 
-# todo: handle errors from above, but for now...
-exit $return_code
+  return_code=$?
+  end=$(date +%s)
+
+  notify $return_code $start $end 
+
+  # todo: handle errors from above, but for now...
+  exit $return_code
+}
+
+nfin "$@"

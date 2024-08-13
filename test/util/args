@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+
+source $(dirname $0)/../test-scripts/test-functions
+
+test_get_arg() {
+  # $1: argument like -h or --help
+  # $@: supported args map
+  local val=$( get_arg '-o' $supported_args_string )
+  assert "[ '$val' = '$arg_optional_param' ]"
+
+  val=$( get_arg '-r' $supported_args_string )
+  assert "[ '$val' = '$arg_required_param' ]"
+  
+  val=$( get_arg '-i' $supported_args_string )
+  assert "[ '$val' = '$arg_infinite_param' ]"
+  
+  val=$( get_arg '-n' $supported_args_string )
+  assert "[ '$val' = '$arg_number_param' ]"
+
+  val=$( get_arg '--optional-param' $supported_args_string )
+  assert "[ '$val' = '$arg_optional_param' ]"
+
+  val=$( get_arg '--required-param' $supported_args_string )
+  assert "[ '$val' = '$arg_required_param' ]"
+  
+  val=$( get_arg '--infinite-param' $supported_args_string )
+  assert "[ '$val' = '$arg_infinite_param' ]"
+  
+  val=$( get_arg '--number-param' $supported_args_string )
+  assert "[ '$val' = '$arg_number_param' ]"
+
+
+}
+
+test_get_formal_arg() {
+  
+  # $1: argument like -h or --help
+  # $@: supported args map
+  local val=$( get_formal_arg '-o' $supported_args_string )
+  assert "[ '$val' = 'optional-para' ]"
+
+  val=$( get_formal_arg '-r' $supported_args_string )
+  assert "[ '$val' = 'required-para' ]"
+  
+  val=$( get_formal_arg '-i' $supported_args_string )
+  assert "[ '$val' = 'infinite-param' ]"
+  
+  val=$( get_formal_arg '-n' $supported_args_string )
+  assert "[ '$val' = 'number-param' ]"
+
+  val=$( get_formal_arg '--optional-param' $supported_args_string )
+  assert "[ '$val' = 'optional-param' ]"
+
+  val=$( get_formal_arg '--required-param' $supported_args_string )
+  assert "[ '$val' = 'required-param' ]"
+  
+  val=$( get_formal_arg '--infinite-param' $supported_args_string )
+  assert "[ '$val' = 'infinite-param' ]"
+  
+  val=$( get_formal_arg '--number-param' $supported_args_string )
+  assert "[ '$val' = 'number-param' ]"
+}
+
+
+test_get_arg_params() {
+  # $1: argument like -h or --help
+  # $@: supported args map
+  
+  local val=$( get_arg_params '-o' $supported_args_string )
+  assert "[ '$val' = '#?' ]"
+
+  val=$( get_arg_params '-r' $supported_args_string )
+  assert "[ '$val' = '#1' ]"
+  
+  val=$( get_arg_params '-i' $supported_args_string )
+  assert "[ '$val' = '#*' ]"
+  
+  val=$( get_arg_params '-n' $supported_args_string )
+  assert "[ '$val' = '#{1,2}' ]"
+
+  val=$( get_arg_params '--optional-param' $supported_args_string )
+  assert "[ '$val' = '#?' ]"
+
+  val=$( get_arg_params '--required-param' $supported_args_string )
+  assert "[ '$val' = '#1' ]"
+  
+  val=$( get_arg_params '--infinite-param' $supported_args_string )
+  assert "[ '$val' = '#*' ]"
+  
+  val=$( get_arg_params '--number-param' $supported_args_string )
+  assert "[ '$val' = '#{1,2}' ]"
+}
+
+test_get_num_arg_params() {
+  local val=$( get_num_arg_params '-o' $supported_args_string )
+  assert "[ '$val' = '0 1' ]"
+
+  val=$( get_num_arg_params '-r' $supported_args_string )
+  assert "[ '$val' = '1 1' ]"
+  
+  val=$( get_num_arg_params '-i' $supported_args_string )
+  assert "[ '$val' = '0 -1' ]"
+  
+  val=$( get_num_arg_params '-n' $supported_args_string )
+  assert "[ '$val' = '1 2' ]"
+
+  val=$( get_num_arg_params '--optional-param' $supported_args_string )
+  assert "[ '$val' = '0 1' ]"
+
+  val=$( get_num_arg_params '--required-param' $supported_args_string )
+  assert "[ '$val' = '1 1' ]"
+  
+  val=$( get_num_arg_params '--infinite-param' $supported_args_string )
+  assert "[ '$val' = '0 -1' ]"
+  
+  val=$( get_num_arg_params '--number-param' $supported_args_string )
+  assert "[ '$val' = '1 2' ]"
+}
+
+# supported args to string
+# accepts array of supported arguments
+# supported arguments
+test_to_supported_args() {
+  local val=$( to_supported_args $supported_args_string )
+
+  assert "[ '$val' = '' ]"
+}
+
+test_verify_arg() {
+  local val=$( verify_arg )
+}
+
+test_get_num_args_greedy() {
+  local val=$( get_num_args_greedy )
+}
+
+# $1: arg string
+test_replace_with_formal_arg() {
+  local val=$( replace_with_formal_arg )
+}
+
+# $1: string of supported arguments
+# $@: arguments
+test_parse_args() {
+  local val=$( parse_args )
+}
+
+
+test() {
+  #   <formal_arg_name>=<arg_flags>[#? | #<number_of_expected_params> | #* | #{<min_num_params>,<max_num_params>} ]
+  arg_optional_param='optional-param=-o|--optional-param#?'
+  arg_required_param='required-param=-r|--required-param#1'
+  arg_infinite_param='infinite-param=-i|--infinite-param#*'
+  arg_number_param='number-param=-n|--number-param#{1,2}'
+
+  supported_args_string="$arg_optional_param $arg_required_param $arg_infinite_param $arg_number_param"
+
+  run_tests "$0" test_get_arg test_get_formal_arg test_get_arg_params test_get_num_arg_params test_to_supported_args test_verify_arg test_get_num_args_greedy test_replace_with_formal_arg test_parse_args
+}
+
+test $@

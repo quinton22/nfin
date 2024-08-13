@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+if [ -s $(dirname $0)/../../bin/util/print ]; then
+  source $(dirname $0)/../../bin/util/print
+fi
+
+# TODO, build summary of failing tests
+
+function assert {
+  assertion_num=$(( $assertion_num + 1 ))
+  if $(eval "$1"); then
+    return 0
+  fi
+
+  num_failed_assertions=$(( $num_failed_assertions + 1 ))
+
+  print_error "Assertion #$assertion_num of test $test_name failed: $1\n" >&2
+  return $assertion_num
+}
+
+function finish_test {
+  if [ $2 -eq 0 ]; then
+    printf "%s: %s\n" "$(print_success 'Pass')" "$1"
+  else
+    printf "%s: %s - %s\n" "$(print_error 'Fail')" "$1" "$(print_error "Failed $2 assertions")" >&2
+  fi
+}
+
+function get_script {
+  local test_file="$(cd $(dirname $1) && pwd)/$(basename $1)"
+  local file_to_test=${test_file/test/bin}
+  source $file_to_test
+}
+
+function before_all {
+  get_script $1
+}
+
+function catch {
+  printf "Test failed: $2\nAssertion #$1\n"
+}
+
+function pretest {
+  assertion_num=0
+  num_failed_assertions=0
+  test_name=$1
+  test_name=${test_name#test_}
+  test_name=${test_name%_test}
+  echo "Running test for $test_name"
+}
+
+function posttest {
+  local test_name=$1
+  test_name=${test_name#test_}
+  test_name=${test_name%_test}
+
+  finish_test $test_name $num_failed_assertions
+}
+
+# synchronously runs a single test
+# $1: test name
+function run_test {
+  pretest "$1"
+  $1
+  local ret=$?
+  posttest "$1" $ret
+  return $ret
+}
+
+# asynchronously runs a list of tests
+# params:
+#   1   : $0 from calling script (script name)
+#   rest: list of tests
+function run_tests {
+  before_all $1
+  shift
+
+  local test=''
+  local pids=()
+  local return_value=0
+
+  for test in $@; do
+    run_test $test &
+    pids+=( $! )
+  done
+
+  for pid in ${pids[@]}; do
+    wait $pid || return_value=1
+  done
+
+  return $return_value
+}
+
+

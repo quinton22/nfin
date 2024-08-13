@@ -63,6 +63,6 @@ function notify {
     [ "$1" -eq 0 ] && finish_type='success' || finish_type='error'
   fi
 
-  $notification_type
+  eval "$notification_type"
   return $?
 }
