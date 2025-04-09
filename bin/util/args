@@ -350,6 +350,10 @@ function parse_args {
 
   # echo "PARSED_ARUGMENTS (${#PARSED_ARUGMENTS[@]}): ${PARSED_ARUGMENTS[@]}" >&2
 
+  # TODO:
+  # verify args
+  # fill in defaults
+
   for arg in "${PARSED_ARUGMENTS[@]}"; do
     eval "$arg"
   done
