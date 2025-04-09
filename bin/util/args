@@ -255,8 +255,6 @@ function split_args {
   local positional_args="$(get_positional_args)"
   local num_positional_args=$(wc -l <<< "$positional_args" | xargs)
 
-  # PARSED_ARUGMENTS=()
-
   local arg_index=0
   local pos_arg_index=0
   while [ $arg_index -lt ${#args_array[@]} ]; do
@@ -336,7 +334,6 @@ function split_args {
     arg_index=$i
   done
 
-  # echo "${PARSED_ARUGMENTS[@]}"
   # echo "PARSED_ARUGMENTS (${#PARSED_ARUGMENTS[@]}): ${PARSED_ARUGMENTS[@]}" >&2
 }
 
@@ -345,25 +342,17 @@ function split_args {
 # 2-n. arguments
 function parse_args {
   create_config $1
-  echo -e "config:\n$config" >&2
+  # echo -e "config:\n$config" >&2
   shift 1
 
   PARSED_ARUGMENTS=()
   split_args "$@"
 
-  # local args=( $() )
-  # echo "args (${#args[@]}): ${args[@]}" >&2
-  echo "PARSED_ARUGMENTS (${#PARSED_ARUGMENTS[@]}): ${PARSED_ARUGMENTS[@]}" >&2
+  # echo "PARSED_ARUGMENTS (${#PARSED_ARUGMENTS[@]}): ${PARSED_ARUGMENTS[@]}" >&2
 
   for arg in "${PARSED_ARUGMENTS[@]}"; do
     eval "$arg"
   done
-
-  echo "str: $str"
-  echo "bool: $bool"
-  echo "pos: $pos"
-  echo "#array[@]: ${#array[@]}"
-  echo "array[@]: ${array[@]}"
 }
 
 
@@ -371,6 +360,11 @@ function parse_args {
 # 
 parse_args "name=str&args=-s|--str&num_params=1 name=bool&args=-b|--bool name=array&args=-a|--array&num_params=* name=pos" -s "' echo hi '" -b "positional" -a "a b c" "d" "e"
 
+echo "str: $str"
+echo "bool: $bool"
+echo "pos: $pos"
+echo "#array[@]: ${#array[@]}"
+echo "array[@]: ${array[@]}"
 
 
 # Format:
