@@ -1,6 +1,395 @@
 #!/usr/bin/env bash
 
-# todo add required args with !
+# Argument parsing utility functions
+
+# Format:
+#   config items separated by '&'
+#   config item format: <name>=<value> or <name> for flags
+#   config items:
+#     name
+#       name of the variable
+#       alphanumeric & underscores only, must start with alphabetic character
+#       required: true
+#     args
+#       named args separated by '|' or a positional argument denoted by n,
+#       where n is a natural number (>=0).
+#       arg format: -<char> | --<alphanumeric & dashes> | <n>
+#       required: false (required for named args)
+#       default: n=0
+#     required
+#       present if the arg is required
+#       boolean
+#       required: false
+#       default: false
+#     num_params
+#       number of expected params
+#       <n>, *, +, ?, [<min>,<max>] or (<min>,<max>)
+#         where n is a natural number (>=0), * is 0 or more, + is 1 or more, and ? is 0 or 1
+#       required: false
+#       default: 0 which defaults to a boolean flag
+#     default
+#       default value for the arg
+#       required: false
+#       default: false for boolean args, '' for others
+#     help
+#       help text for the arg
+#       required: false
+
+#   For boolean args, the argument --no-<arg> will automatically be supported
+#   For positional args, the argument will be processed after all named args have been processed.
+#   Arguments are processed in order from left to right, so an argument with * or + should be placed 
+#   last in the invocation. Arguments with * or + will consume all remaining params and arguments.
+#   To avoid this behavior you can use the format --<arg>=<value> multiple times for the same arg,
+#   and it will be processed into an array without consuming other arguments.
+
+# 1. config name
+function get_arg_def {
+  echo "$config" | grep "name=$1"
+}
+
+# 1. arg
+function find_arg_def {
+  for item in $config; do
+    local args=$(get_config_value "args" "$item")
+    if grep -Eq -- "$args" <<< "$1"; then
+      echo "$item"
+      return
+    fi
+  done
+}
+
+function is_boolean_key {
+  local config_item=$2
+  local value=$(echo "$config_item" | grep -E -o "$1[^&]*")
+
+  [ "$value" =~ "=" ] && return 1 || return 0
+}
+
+# 1. config key
+# 2. config item or config name
+function get_config_value {
+  local config_item=$2
+  grep -q "name=" <<< "$config_item" || config_item=$(get_arg_def "$2")
+  local value=$(echo "$config_item" | grep -E -o "$1[^&]*")
+
+
+  if [ -z "$value" ]; then
+    return
+  fi
+
+  if [[ "$value" =~ "=" ]]; then
+    echo "${value#*=}"
+  else
+    echo 'true'
+  fi
+}
+
+function is_boolean_config_item {
+  local config_item=$1
+  return $(get_config_value "num_params" "$config_item") # 0 = true
+}
+
+function get_config_value_boolean {
+  [ -z "$(get_config_value $@)" ] && echo 'false' || echo 'true'
+}
+
+function is_positional_arg {
+  local args=$(get_config_value "args" "$1")
+
+  [[ "$args" =~ "-" ]] && return 1 || return 0
+}
+
+function is_required_arg {
+  [ $(get_config_value_boolean "required" "$1") ] && return 0 || return 1
+}
+
+# 1. config item
+# 2. key to update
+# 3. new value
+function update_config_item {
+  local config_item=$1
+  local key=$2
+  local value=$3
+
+  if ! grep -q "$key=" <<< "$config_item"; then
+    echo "$config_item&$key=$value"
+  else
+    echo "$config_item" | sed -E "s/$key=[^&]*/$key=$value/"
+  fi
+}
+
+# n. config items
+function create_config {
+  config=$(array_join $'\n' "$@")
+  normalize_config
+}
+
+function normalize_config {
+  # set all default values
+  local config_item
+  local i=1
+  for config_item in $config; do
+    local num_params=$(get_config_value "num_params" "$config_item")
+    if [ -z "$num_params" ]; then
+      num_params=0
+      config_item=$(update_config_item "$config_item" "num_params" "$num_params")
+    fi
+
+    local required=$(get_config_value "required" "$config_item")
+    if [ -z "$required" ]; then
+      required='false'
+      config_item=$(update_config_item "$config_item" "required" "$required")
+    fi
+
+    if [ "$num_params" = "0" ]; then
+      local default=$(get_config_value "default" "$config_item")
+      if [ -z "$default" ] && ! "$required" && ! is_positional_arg "$config_item"; then
+        config_item=$(update_config_item "$config_item" "default" "false")
+      fi
+    fi
+
+    if [ -z "$(get_config_value "args" "$config_item")" ]; then
+      config_item=$(update_config_item "$config_item" "args" 0)
+    fi
+
+    config=$(sed -E "$i s/.*/$(sed -E 's/\&/\\\&/g' <<< "$config_item")/" <<< "$config")
+
+    (( ++i ))
+
+    # todo: if arg is boolean and --no-<arg> is not present, add it with name=!<name>
+  done
+}
+
+function get_positional_args {
+  local positional_args=''
+  for item in $config; do
+    if is_positional_arg "$item"; then
+      positional_args+="$item\n"
+    fi
+  done
+  
+  positional_args=${positional_args%\\n}
+
+  echo -e "$positional_args" | sed -E 's/(.*args=)([^&]+)(.*)/\1 \2 \3/' | sort -k 2 -n | sed 's/ //g'
+}
+
+function get_named_args {
+  local named_args=''
+  for item in $config; do
+    if ! is_positional_arg "$item"; then
+      echo "$item"
+    fi
+  done
+}
+
+function get_required_args {
+  local required_args=''
+  for item in $config; do
+    if is_required_arg "$item"; then
+      echo "$item"
+    fi
+  done
+}
+
+function get_optional_args {
+  local optional_args=''
+  for item in $config; do
+    if ! is_required_arg "$item"; then
+      echo "$item"
+    fi
+  done
+}
+
+# return a string in the form of "<min> <max>"
+# if <max> is -1, then it is infinite
+# valid config options: <n>, *, +, ?, [<min>,<max>] or (<min>,<max>)
+# 1. config item
+function get_num_arg_params {
+  local config_item=$1
+  local num_params=$(get_config_value "num_params" "$config_item")
+
+  case $num_params in
+    \*) echo "0 -1" ;;
+    \+) echo "1 -1" ;;
+    \?) echo "0 1" ;;
+    \[*\]|\(*\)) echo "$num_params" | sed -E 's/[][)(]//g;s/,/ /' ;;
+    [[:digit:]]) echo "$num_params $num_params" ;;
+    "") echo "0 0";;
+    *) echo "0 0" ;;
+  esac
+
+  echo "$num_params"
+}
+
+function is_named_arg {
+  if [[ "$1" =~ "-" ]] && [ -n "$(find_arg_def "$1")"]; then
+    return 0
+  fi
+  return 1
+}
+
+function find_suitable_array_delimiter {
+  local possible_delimiters=',;:|-_+&'
+  local delim=$(tr -d "$(echo "$@" | tr -dC "$possible_delimiters")" <<< "$possible_delimiters")
+  echo "${delim:0:1}"
+}
+
+function array_join {
+  local IFS="$1"
+  shift
+  echo "$*"
+}
+
+function escape_and_quote {
+  # printf '"%q"' "$1"
+  sed -e "s/'/'\\\\''/g; 1s/^/'/; \$s/\$/'/" <<< "$1"
+}
+
+# split args onto new lines
+# go from left to right taking the max_num_params for an arg
+# @. args
+function split_args {
+  local args_array=( "$@" )
+
+  local named_args="$(get_named_args)"
+  local positional_args="$(get_positional_args)"
+  local num_positional_args=$(wc -l <<< "$positional_args" | xargs)
+
+  # PARSED_ARUGMENTS=()
+
+  local arg_index=0
+  local pos_arg_index=0
+  while [ $arg_index -lt ${#args_array[@]} ]; do
+    local arg="${args_array[$(( arg_index++ ))]}"
+    local arg_def="$(find_arg_def "$arg")"
+    if [ -z "$arg_def" ]; then
+      # needs to be positional
+      if [ $pos_arg_index -lt $num_positional_args ]; then
+        local arg_item=$( echo "$positional_args" | sed -n "$(( pos_arg_index++ + 1 ))p" )
+        # PARSED_ARUGMENTS+=( "$(get_config_value "name" "$arg_item")=$arg" )
+        PARSED_ARUGMENTS+=( "$(get_config_value "name" "$arg_item")=$(escape_and_quote "$arg")" ) # quoted args
+        continue
+      fi
+      
+      echo "Unsupported argument '$arg'." >&2
+      return 1
+    fi
+
+    local num_params=( $(get_num_arg_params "$arg_def") )
+    local arg_params=( "${args_array[@]:$arg_index:${num_params[0]}}" )
+
+    local max=${num_params[1]}
+    
+    if [ $max -eq -1 ]; then
+      max=${#args_array[@]}
+    else
+      max=$(( $arg_index + $max ))
+    fi
+
+    local i=$(( $arg_index + ${num_params[0]} ))
+    while [ $i -lt $max ]; do
+      local next_param="${args_array[$(( i++ ))]}"
+
+      if [ -z "$next_param" ] || is_named_arg "$next_param"; then
+        # reached end of args_array or next arg is named
+        break
+      fi
+
+      arg_params+=( "$next_param" )
+    done
+
+    local quoted_params=()
+
+    for param in "${arg_params[@]}"; do
+      # quoted_params+=( "$param" )
+      quoted_params+=( "$(escape_and_quote "$param")" ) # quoted params
+    done
+
+    # set booleans to true
+    if [ "${#quoted_params[@]}" -eq 0 ] && [ "$(get_config_value "num_params" "$arg_def")" -eq 0 ]; then
+      # quoted_params=( true )
+      quoted_params=( "$(escape_and_quote true)" ) # quoted params
+    fi
+
+    # local delimiter=
+
+    # if [ "${#quoted_params[@]}" -gt 1 ]; then
+    #   delimiter=$(find_suitable_array_delimiter "${quoted_params[@]}")
+
+    #   if [ -z "$delimiter" ]; then
+    #     delimiter=','
+    #     echo "Warning: No suitable delimiter found for array args. This will cause problems." >&2
+    #   fi
+    # fi
+
+    local param_key=$(get_config_value "name" "$arg_def")
+    local param_value=
+    if [ "${#quoted_params[@]}" -gt 1 ]; then
+      # param_value=$(array_join "$delimiter" "${quoted_params[@]}")
+      param_value="( $(array_join ' ' "${quoted_params[@]}") )"
+    else
+      param_value="${quoted_params[0]}"
+    fi
+
+    PARSED_ARUGMENTS+=( "$param_key=$param_value" )
+
+    arg_index=$i
+  done
+
+  # echo "${PARSED_ARUGMENTS[@]}"
+  # echo "PARSED_ARUGMENTS (${#PARSED_ARUGMENTS[@]}): ${PARSED_ARUGMENTS[@]}" >&2
+}
+
+
+# 1. supported arguments string
+# 2-n. arguments
+function parse_args {
+  create_config $1
+  echo -e "config:\n$config" >&2
+  shift 1
+
+  PARSED_ARUGMENTS=()
+  split_args "$@"
+
+  # local args=( $() )
+  # echo "args (${#args[@]}): ${args[@]}" >&2
+  echo "PARSED_ARUGMENTS (${#PARSED_ARUGMENTS[@]}): ${PARSED_ARUGMENTS[@]}" >&2
+
+  for arg in "${PARSED_ARUGMENTS[@]}"; do
+    eval "$arg"
+  done
+
+  echo "str: $str"
+  echo "bool: $bool"
+  echo "pos: $pos"
+  echo "#array[@]: ${#array[@]}"
+  echo "array[@]: ${array[@]}"
+}
+
+
+# Test params
+# 
+parse_args "name=str&args=-s|--str&num_params=1 name=bool&args=-b|--bool name=array&args=-a|--array&num_params=* name=pos" -s "' echo hi '" -b "positional" -a "a b c" "d" "e"
+
+
+
+# Format:
+#   name=<variable_name>&args=<arg1>[|<arg2>[|<arg3>...]][&required]&num_params=<0|1|*|[<min>,<max>]|(<min>,<max>)
+
+# Examples
+#   name=help&args=-h|--help
+#   name=version&args=-v|--version&num_params=?
+#   name=file&args=-f|--file&required&num_params=1
+
+#   if <named_args> is not provided, the arg will be considered a positional arg which is processed after all named args have been processed.
+
+#   Example:
+#     help=-h|--help
+#     force=-f|--force
+#     list-versions=-l|--list|--list-versions#?
+#     version=-v|--version#1
+#     command=--#*
+
 
 # a supported argument should take the following form
 #   <formal_arg_name>=<arg_flags>[#? | #<number_of_expected_params> | #* | #{<min_num_params>,<max_num_params>} ]
@@ -11,188 +400,285 @@
 # example supported args map
 # ( 'help=-h|--help' 'force=-f|--force' 'list-versions=-l|--list|--list-versions#?' 'version=-v|--version#1' )
 # example supported args string
-# "help=-h|--help&force=-f|--force&list-versions=-l|--list|--list-versions#?&version=-v|--version#1"
+# "help=-h|--help force=-f|--force list-versions=-l|--list|--list-versions#? version=-v|--version#1"
 
+# # Returns the formal variable name for arg
+# # $1: arg string
+# function variable_name_from_arg {
+#   local arg=$1
+#   echo "${arg%%=*}"
+# }
 
-# $1: arg
-# $@: map
-function get_arg {
-  local a=$1
-  shift 1
-  local m=( $@ )
-  local arg
-  for arg in "${m[@]}"; do
-    if echo "$a" | grep -Eq -- $(echo "^${arg#*=}" | sed 's/#.*/$/g;s/|/$|^/g'); then
-      break
-    fi
-  done
+# # Returns the arg names for arg separated by '|'
+# # $1: arg string
+# function arg_names_from_arg {
+#   local arg=$1
+#   arg=${arg##*=}
+#   arg=${arg%%!*}
+#   arg=${arg%%\#*}
+
+#   [ -n "$arg" ] && echo "$arg"
+# }
+
+# # $1: arg
+# # $@: map
+# function get_arg {
+#   local a=$1
+#   shift 1
+#   local m=( $@ )
+#   local arg
+#   for arg in "${m[@]}"; do
+#     if echo "$a" | grep -Eq -- $(echo "^${arg#*=}" | sed 's/#.*/$/g;s/|/$|^/g'); then
+#       break
+#     fi
+#   done
   
-  echo "$arg"
-}
+#   echo "$arg"
+# }
 
-# $1: argument like -h or --help
-# $@: supported args map
-function get_formal_arg {
-  local arg=$(get_arg $@)
-  echo "${arg%%=*}"
-}
+# # $1: argument like -h or --help
+# # $@: supported args map
+# function get_formal_arg {
+#   local arg=$(get_arg $@)
+#   echo "${arg%%=*}"
+# }
 
-# $1: argument like -h or --help
-# rest: supported args map
-function get_arg_params {
-  local arg=$(get_arg $@)
-  if echo "$arg" | grep -q -- '#'; then
-    echo "#${arg#*\#}"
-  else
-    echo ""
-  fi
-}
+# # $1: argument like -h or --help
+# # rest: supported args map
+# function get_arg_params {
+#   local arg=$(get_arg $@)
+#   if echo "$arg" | grep -q -- '#'; then
+#     echo "#${arg#*\#}"
+#   else
+#     echo ""
+#   fi
+# }
 
-# $1: argument like -h or --help
-# rest: supported args map
-function get_num_arg_params {
-  local arg_params=$(get_arg_params $@)
-  case $arg_params in 
-    \#\?) echo "0 1" ;;
-    \#\*) echo "0 -1" ;; # represents infinite
-    \#{*}) echo ${arg_params#\#} | sed 's/[{}]//g;s/ //g;s/,/ /g' ;;
-    \#*) echo "${arg_params#\#} ${arg_params#\#}" ;;
-    "") echo "0 0";;
-    *) echo "0 0" ;;
-  esac
-}
+# # supported args to string
+# # accepts array of supported arguments
+# # supported arguments
+# function get_supported_args_matcher {
+#   local supported_args=''
+#   for s_arg in "$@"; do
+#     s_arg=${s_arg#*=}
+#     s_arg=${s_arg%%!*}
+#     s_arg=${s_arg%%\#*}
+#     supported_args+="|$s_arg"
+#   done
 
-# supported args to string
-# accepts array of supported arguments
-# supported arguments
-function to_supported_args {
-  local supported_args_map=( $@ )
-  local supported_args=''
-  for s_arg in "${supported_args_map[@]}"; do
-    s_arg=${s_arg#*=}
-    s_arg=${s_arg%%\#*}
-    supported_args+="|$s_arg"
-  done
+#   supported_args=${supported_args#|}
 
-  supported_args=${supported_args#|}
+#   echo $supported_args
+# }
 
-  echo $supported_args
-}
+# function verify_arg {
+#   local num_accepted_args=( $(get_num_arg_params $@) )
+#   local params=( $1 )
+#   params=( ${params[@]:1} )
+#   local num_args=${#params[@]}
 
-function verify_arg {
-  local num_accepted_args=( $(get_num_arg_params $@) )
-  local params=( $1 )
-  params=( ${params[@]:1} )
-  local num_args=${#params[@]}
+#   if [ $num_args -lt ${num_accepted_args[0]} ] || ([ ${num_accepted_args[1]} -ne -1 ] && [ $num_args -gt ${num_accepted_args[1]} ]); then
 
-  if [ $num_args -lt ${num_accepted_args[0]} ] || ([ ${num_accepted_args[1]} -ne -1 ] && [ $num_args -gt ${num_accepted_args[1]} ]); then
+#     local error_text='Expected '
+#     if [ ${num_accepted_args[0]} -eq ${num_accepted_args[1]} ]; then
+#       error_text+="${num_accepted_args[0]} arg(s), "
+#     elif [ ${num_accepted_args[1]} -eq -1 ]; then
+#         error_text+="${num_accepted_args[0]} or more args, "
+#     else
+#       error_text+="between ${num_accepted_args[0]} and ${num_accepted_args[1]} args, "
+#     fi
 
-    local error_text='Expected '
-    if [ ${num_accepted_args[0]} -eq ${num_accepted_args[1]} ]; then
-      error_text+="${num_accepted_args[0]} arg(s), "
-    elif [ ${num_accepted_args[1]} -eq -1 ]; then
-        error_text+="${num_accepted_args[0]} or more args, "
-    else
-      error_text+="between ${num_accepted_args[0]} and ${num_accepted_args[1]} args, "
-    fi
+#     error_text+="but received $num_args arg(s)."
 
-    error_text+="but received $num_args arg(s)."
+#     echo "Error in the number of arguments for arg '$1'. $error_text" >&2
+#     return 1
+#   fi
+#   return 0
+# }
 
-    echo "Error in the number of arguments for arg '$1'. $error_text" >&2
-    return 1
-  fi
-  return 0
-}
+# function get_num_args_greedy {
+#   local num_accepted_args=( $(get_num_arg_params $@) )
+#   local params=( $1 )
+#   params=( ${params[@]:1} )
+#   local num_args=${#params[@]}
 
-function get_num_args_greedy {
-  local num_accepted_args=( $(get_num_arg_params $@) )
-  local params=( $1 )
-  params=( ${params[@]:1} )
-  local num_args=${#params[@]}
+#   if [ $num_args -lt ${num_accepted_args[0]} ]; then
+#     return 1
+#   fi
 
-  if [ $num_args -lt ${num_accepted_args[0]} ]; then
-    return 1
-  fi
+#   echo ${num_accepted_args[1]}
+#   return 0
+# }
 
-  echo ${num_accepted_args[1]}
-  return 0
-}
+# # $1: arg string
+# function replace_with_formal_arg {
+#   local arg_array=( $1 )
+#   shift 1
+#   local arg=${arg_array[0]}
+#   local params=${arg_array[@]:1}
 
-# $1: arg string
-function replace_with_formal_arg {
-  local arg_array=( $1 )
-  shift 1
-  local arg=${arg_array[0]}
-  local params=${arg_array[@]:1}
+#   local formal_arg=$(get_formal_arg "$arg" $@)
 
-  local formal_arg=$(get_formal_arg "$arg" $@)
-
-  echo "$formal_arg=$params"
+#   echo "$formal_arg=$params"
   
-  # if [ -z "$params" ]; then
-  #   params=true    
-  # fi
-  # echo "$formal_arg=$params"
-}
+#   # if [ -z "$params" ]; then
+#   #   params=true    
+#   # fi
+#   # echo "$formal_arg=$params"
+# }
 
 
-# $1: string of supported arguments
-# $@: arguments
-function parse_args {
-  local command_arg='command'
-  local supported_args_map=( $1 )
+# # $1: string of supported arguments
+# # $@: arguments
+# function parse_args {
+#   local command_arg='command'
+#   local supported_args_map=( $1 )
   
-  if [[ ! "${supported_args_map[@]}" =~ '=--#' ]] && [[ ! "${supported_args_map[@]} " =~ '=-- ' ]]; then
-    supported_args_map+=( "$command_arg=--#*" )
-  fi
+#   if [[ ! "${supported_args_map[@]}" =~ '=--#' ]] && [[ ! "${supported_args_map[@]} " =~ '=-- ' ]]; then
+#     supported_args_map+=( "$command_arg=--#*" )
+#   fi
 
-  local supported_args=$(to_supported_args ${supported_args_map[@]})
-  shift 1
-  local args=$@
+#   local supported_args=$(get_supported_args_matcher ${supported_args_map[@]})
+#   shift 1
+#   local args=$@
 
-  args=$(echo "$args" | sed -E "s/($supported_args)/\n\1/g;s/\n//")
+#   args=$(echo "$args" | sed -E "s/($supported_args)/\n\1/g;s/\n//")
 
-  local index=0
-  local last=$(wc -l <<< "$args" | xargs)
+#   local index=0
+#   local last=$(wc -l <<< "$args" | xargs)
 
-  local ret=0
+#   local ret=0
 
-  while read -r arg; do
-    (( index++ ))
-    local error=false
-    local error_message=$( verify_arg "$arg" ${supported_args_map[@]} 2>&1 )
-    [ -n "$error_message" ] && error=true
-    local last_arg=
+#   while read -r arg; do
+#     (( index++ ))
+#     local error=false
+#     local error_message=$( verify_arg "$arg" ${supported_args_map[@]} 2>&1 )
+#     [ -n "$error_message" ] && error=true
+#     local last_arg=
 
-    if $error && [ $index -eq $last ];  then
-      # take as many args as possible & put the rest in 'command'
-      local num_args=$( get_num_args_greedy "$arg" ${supported_args_map[@]} ) && error=false || error=true
+#     if $error && [ $index -eq $last ];  then
+#       # take as many args as possible & put the rest in 'command'
+#       local num_args=$( get_num_args_greedy "$arg" ${supported_args_map[@]} ) && error=false || error=true
 
-      if ! $error; then
-        local arg_array=( $arg )
-        arg=${arg_array[@]:0:(( $num_args + 1 ))}
-        arg=${arg[@]}
+#       if ! $error; then
+#         local arg_array=( $arg )
+#         arg=${arg_array[@]:0:(( $num_args + 1 ))}
+#         arg=${arg[@]}
 
-        last_arg=${arg_array[@]:(( $num_args + 1 ))}
-      fi
-    fi
+#         last_arg=${arg_array[@]:(( $num_args + 1 ))}
+#       fi
+#     fi
       
-    if $error; then
-      echo $error_message
-      ret=1
-      continue
-    fi
+#     if $error; then
+#       echo $error_message
+#       ret=1
+#       continue
+#     fi
 
-    replace_with_formal_arg "$arg" ${supported_args_map[@]}
+#     replace_with_formal_arg "$arg" ${supported_args_map[@]}
 
-    if [ -n "$last_arg" ]; then
-      echo "$command_arg=$last_arg"
-    fi
-  done <<< "$args"
+#     if [ -n "$last_arg" ]; then
+#       echo "$command_arg=$last_arg"
+#     fi
+#   done <<< "$args"
 
-  return $ret
-}
+#   return $ret
+# }
 
-function to_usage {
-  :
-}
+# function to_usage {
+#   :
+# }
+
+# function verify_required_args {
+#   local required_args=( $(get_required_args "$1") )
+#   shift
+#   local args=$@
+#   local arg_matcher=$(get_supported_args_matcher $args)
+
+
+
+#   local required_args_present=true
+
+#   for r_arg in "${required_args[@]}"; do
+#     local arg_matcher=$(get_supported_args_matcher "$r_arg")
+#     if ! echo "$args" | grep -Eq -- "$arg_matcher"; then
+#       echo "Required argument '$r_arg' is missing." >&2
+#       required_args_present=false
+#     fi
+#   done
+# }
+
+# # $1: string of supported arguments
+# function get_required_args {
+#   local supported_args=( $1 )
+#   for s_arg in "${supported_args[@]}"; do
+#     if [[ "$s_arg" =~ '!' ]]; then
+#       echo "$s_arg"
+#     fi
+#   done
+# }
+
+
+# # $1: string of supported arguments
+# # $@: arguments
+# function parse_args_new {
+#   local supported_args_string=$1
+#   local supported_args_map=( $1 )
+#   if [[ "${supported_args_map[@]}" =~ '=--#' ]] || [[ "${supported_args_map[@]} " =~ '=-- ' ]]; then
+#     local has_command_arg=true
+#   fi
+
+#   local supported_args=$(get_supported_args_matcher ${supported_args_map[@]})
+#   shift 1
+#   local args=$@
+
+#   # # get required args
+#   # local required_args=( $(get_required_args "$supported_args_string") )
+
+#   # # check if required args are present
+#   # local required_args_present=true
+
+
+#   # put args on separate lines
+#   args=$(echo "$args" | sed -E "s/($supported_args)/\n\1/g;s/\n//")
+
+#   local index=0
+#   local last=$(wc -l <<< "$args" | xargs)
+
+#   local ret=0
+
+#   while read -r arg; do
+#     (( index++ ))
+#     local error=false
+#     local error_message=$( verify_arg "$arg" ${supported_args_map[@]} 2>&1 )
+#     [ -n "$error_message" ] && error=true
+#     local last_arg=
+
+#     if $error && [ $index -eq $last ];  then
+#       # take as many args as possible & put the rest in 'command'
+#       local num_args=$( get_num_args_greedy "$arg" ${supported_args_map[@]} ) && error=false || error=true
+
+#       if ! $error; then
+#         local arg_array=( $arg )
+#         arg=${arg_array[@]:0:(( $num_args + 1 ))}
+#         arg=${arg[@]}
+
+#         last_arg=${arg_array[@]:(( $num_args + 1 ))}
+#       fi
+#     fi
+      
+#     if $error; then
+#       echo $error_message
+#       ret=1
+#       continue
+#     fi
+
+#     replace_with_formal_arg "$arg" ${supported_args_map[@]}
+
+#     if [ -n "$last_arg" ]; then
+#       echo "$command_arg=$last_arg"
+#     fi
+#   done <<< "$args"
+
+#   return $ret
+# }
